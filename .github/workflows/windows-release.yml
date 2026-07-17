@@ -28,6 +28,20 @@ jobs:
         shell: pwsh
         run: .\CDriveCleaner.Tests\bin\Release\CDriveCleaner.Tests.exe
 
+      - name: Run executable startup smoke test
+        shell: pwsh
+        run: |
+          $process = Start-Process '.\ZyperWin++\bin\Release\C DiskGlow.exe' -ArgumentList '--smoke-test' -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            if (Test-Path '.\smoke-test-error.txt') {
+              Get-Content '.\smoke-test-error.txt'
+            }
+            throw "Executable smoke test failed with exit code $($process.ExitCode)."
+          }
+          if (-not (Test-Path '.\smoke-test-ok.txt')) {
+            throw "Executable smoke test did not write its success marker."
+          }
+
       - name: Validate single-file executable
         shell: pwsh
         run: |

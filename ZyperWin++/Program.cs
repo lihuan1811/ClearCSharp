@@ -11,19 +11,22 @@ namespace ZyperWin__
         private static Mutex singleInstance;
 
         [STAThread]
-        private static void Main()
+        private static int Main(string[] args)
         {
             AppDomain.CurrentDomain.AssemblyResolve += ResolveEmbeddedAssembly;
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            if (Array.Exists(args ?? new string[0], value => string.Equals(value, "--smoke-test", StringComparison.OrdinalIgnoreCase)))
+                return RunSmokeTest();
+
             bool createdNew;
             singleInstance = new Mutex(true, "CDiskGlow_Net48_SingleInstance", out createdNew);
             if (!createdNew)
             {
                 MessageBox.Show("C DiskGlow 已经在运行中。", "C DiskGlow", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                return 0;
             }
 
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
             try
             {
                 Application.Run(new MainWindow());
@@ -32,6 +35,42 @@ namespace ZyperWin__
             {
                 singleInstance.ReleaseMutex();
                 singleInstance.Dispose();
+            }
+            return 0;
+        }
+
+        private static int RunSmokeTest()
+        {
+            try
+            {
+                using (var shell = new MainWindow())
+                {
+                    shell.CreateControl();
+                    shell.PerformLayout();
+                }
+                Control[] modules =
+                {
+                    new CleanupDashboard(),
+                    new UninstallDashboard(),
+                    new SystemOptimizationDashboard(),
+                    new FileManagerDashboard(),
+                    new RepairDashboard()
+                };
+                foreach (Control module in modules)
+                {
+                    using (module)
+                    {
+                        module.CreateControl();
+                        module.PerformLayout();
+                    }
+                }
+                File.WriteAllText("smoke-test-ok.txt", "C DiskGlow module construction passed.");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                File.WriteAllText("smoke-test-error.txt", ex.ToString());
+                return 1;
             }
         }
 

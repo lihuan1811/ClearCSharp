@@ -18,6 +18,7 @@ namespace ZyperWin__
         private readonly Label detail = UiFactory.StatusLabel("只显示驱动和当前硬件实际支持的检测或官方操作入口。");
         private readonly ProgressBar progress = new ProgressBar();
         private IList<GpuInfo> devices = new List<GpuInfo>();
+        private CancellationTokenSource cancellation;
 
         public GpuDashboard()
         {
@@ -92,11 +93,16 @@ namespace ZyperWin__
 
         private async Task DetectAsync()
         {
+            if (cancellation != null) cancellation.Cancel();
+            var source = new CancellationTokenSource();
+            cancellation = source;
             SetBusy(true);
             detail.Text = "正在读取显示适配器和厂商驱动能力...";
             try
             {
-                devices = await service.DetectAsync(CancellationToken.None);
+                IList<GpuInfo> detected = await service.DetectAsync(source.Token);
+                if (source.IsCancellationRequested || IsDisposed) return;
+                devices = detected;
                 grid.Rows.Clear();
                 foreach (GpuInfo gpu in devices)
                 {
@@ -118,6 +124,10 @@ namespace ZyperWin__
                 OperationLogger.Info("显卡检测", "检测到 " + devices.Count + " 个显示适配器");
                 if (grid.Rows.Count > 0) grid.Rows[0].Selected = true;
             }
+            catch (OperationCanceledException)
+            {
+                if (!IsDisposed) detail.Text = "显卡检测已取消。";
+            }
             catch (Exception ex)
             {
                 detail.Text = "检测失败：" + ex.Message;
@@ -125,8 +135,14 @@ namespace ZyperWin__
             }
             finally
             {
-                SetBusy(false);
-                ShowSelectedDetails();
+                bool isCurrent = ReferenceEquals(cancellation, source);
+                if (isCurrent) cancellation = null;
+                source.Dispose();
+                if (isCurrent && !IsDisposed)
+                {
+                    SetBusy(false);
+                    ShowSelectedDetails();
+                }
             }
         }
 
@@ -180,6 +196,12 @@ namespace ZyperWin__
                 case GpuVendor.Intel: return "Intel";
                 default: return "未知";
             }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && cancellation != null) cancellation.Cancel();
+            base.Dispose(disposing);
         }
     }
 }

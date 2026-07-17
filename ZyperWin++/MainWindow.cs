@@ -7,6 +7,15 @@ namespace ZyperWin__
 {
     public sealed class MainWindow : AntdUI.Window
     {
+        public static readonly string[] FinalModules =
+        {
+            "C盘深度清理",
+            "软件强力卸载",
+            "系统智能优化",
+            "磁盘文件管理器",
+            "CMD 系统修复"
+        };
+
         private readonly AntdUI.PageHeader titleBar = new AntdUI.PageHeader();
         private readonly Panel navigation = new Panel();
         private readonly FlowLayoutPanel navigationButtons = new FlowLayoutPanel();
@@ -38,7 +47,7 @@ namespace ZyperWin__
             Controls.Add(navigation);
             Controls.Add(titleBar);
 
-            Shown += delegate { Navigate("C 盘深度清理"); };
+            Shown += delegate { Navigate(FinalModules[0]); };
         }
 
         public void SetMenuEnabled(bool enabled)
@@ -101,11 +110,7 @@ namespace ZyperWin__
             navigationButtons.WrapContents = false;
             navigationButtons.Padding = new Padding(4, 8, 0, 6);
 
-            AddNavigationButton("C 盘深度清理");
-            AddNavigationButton("软件强力卸载");
-            AddNavigationButton("系统智能优化");
-            AddNavigationButton("磁盘文件管理器");
-            AddNavigationButton("CMD 系统修复");
+            foreach (string module in FinalModules) AddNavigationButton(module);
 
             navigation.Controls.Add(navigationButtons);
             navigation.Controls.Add(brand);

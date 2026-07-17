@@ -16,7 +16,10 @@ namespace CDriveCleaner.Tests
             Run("Byte formatting", TestByteFormatting);
             Run("Uninstall command parsing", TestCommandParsing);
             Run("Cleanup catalog safety", TestCleanupCatalog);
+            Run("Final navigation contract", TestFinalNavigation);
             Run("Disk analysis", TestDiskAnalysis);
+            Run("Managed file classification", TestManagedFiles);
+            Run("Migration catalog contract", TestMigrationCatalog);
             Run("Zyper optimization data", TestOptimizationData);
 
             Console.WriteLine(failures == 0
@@ -68,9 +71,57 @@ namespace CDriveCleaner.Tests
                 Assert(rules.All(rule => rule.PathTemplates.Count > 0), kind + " contains an empty rule");
             }
 
+            var driveRules = CleanupCatalog.GetRules(CleanupKind.DriveC);
+            string[] expectedCategories = { "过期文件", "系统相关", "缓存文件", "应用程序", "临时文件" };
+            Assert(driveRules.Select(rule => rule.Category).Distinct().OrderBy(value => value)
+                .SequenceEqual(expectedCategories.OrderBy(value => value)), "cleanup categories no longer match the final PRD");
+            Assert(driveRules.Any(rule => rule.ScanOnly && rule.Name.Contains("WinSxS")), "high-risk WinSxS paths must remain scan-only");
+            Assert(driveRules.All(rule => !rule.Name.Contains("QQ专清") && !rule.Name.Contains("微信专清")), "removed dedicated cleaners returned");
+
             string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             Assert(!CleanupService.IsSafeCleanupRoot(user), "user profile root must be protected");
             Assert(!CleanupService.IsSafeCleanupRoot(Path.GetPathRoot(Environment.CurrentDirectory)), "drive root must be protected");
+        }
+
+        private static void TestFinalNavigation()
+        {
+            string[] expected = { "C盘深度清理", "软件强力卸载", "系统智能优化", "磁盘文件管理器", "CMD 系统修复" };
+            Assert(MainWindow.FinalModules.SequenceEqual(expected), "main navigation no longer matches the final five modules");
+        }
+
+        private static void TestManagedFiles()
+        {
+            Assert(ManagedFileService.DetectType("movie.mp4") == ManagedFileType.Video, "video classification failed");
+            Assert(ManagedFileService.DetectType("photo.png") == ManagedFileType.Image, "image classification failed");
+            Assert(ManagedFileService.DetectType("setup.msi") == ManagedFileType.Installer, "installer classification failed");
+            Assert(ManagedFileService.DetectType("archive.7z") == ManagedFileType.Archive, "archive classification failed");
+            Assert(ManagedFileService.DetectType("report.pdf") == ManagedFileType.Document, "document classification failed");
+
+            string root = Path.Combine(Path.GetTempPath(), "CDiskGlowManagedFiles_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                File.WriteAllBytes(Path.Combine(root, "large.mp4"), new byte[256]);
+                File.WriteAllBytes(Path.Combine(root, "small.mp4"), new byte[64]);
+                File.WriteAllBytes(Path.Combine(root, "ignore.txt"), new byte[512]);
+                var service = new ManagedFileService();
+                var files = service.ScanAsync(root, ManagedFileType.Video, 1, null, CancellationToken.None).GetAwaiter().GetResult();
+                Assert(files.Count == 1 && files[0].Name == "large.mp4", "type filter or largest-file limit failed");
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        private static void TestMigrationCatalog()
+        {
+            string[] expected = { "desktop", "documents", "downloads", "pictures", "videos", "appdata_cache", "temp" };
+            var folders = MigrationService.Catalog();
+            Assert(folders.Count == expected.Length, "migration catalog must contain exactly seven final-PRD folders");
+            Assert(folders.Select(folder => folder.Key).OrderBy(value => value).SequenceEqual(expected.OrderBy(value => value)),
+                "migration catalog keys do not match the final PRD");
+            Assert(folders.All(folder => !string.IsNullOrWhiteSpace(folder.SourcePath)), "migration source path is empty");
         }
 
         private static void TestDiskAnalysis()
