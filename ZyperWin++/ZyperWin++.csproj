@@ -57,6 +57,8 @@
     <Compile Include="CleanupService.cs" />
     <Compile Include="DiskAnalysisService.cs" />
     <Compile Include="FileManagerDashboard.cs" />
+    <Compile Include="FileManagerShell.cs" />
+    <Compile Include="FileOperationsDashboard.cs" />
     <Compile Include="GpuDashboard.cs" />
     <Compile Include="GpuService.cs" />
     <Compile Include="Infrastructure.cs" />
@@ -71,6 +73,9 @@
       <DependentUpon>Optimize.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.cs" />
+    <Compile Include="ManagedFileService.cs" />
+    <Compile Include="MigrationDashboard.cs" />
+    <Compile Include="MigrationService.cs" />
     <Compile Include="RepairDashboard.cs" />
     <Compile Include="RestoreDialog.cs" />
     <Compile Include="SystemOptimizationDashboard.cs" />

@@ -10,7 +10,7 @@ using System.Windows.Forms;
 
 namespace ZyperWin__
 {
-    public sealed class FileManagerDashboard : UserControl
+    public sealed class DiskVisualizationDashboard : UserControl
     {
         private readonly DiskAnalysisService service = new DiskAnalysisService();
         private readonly DataGridView fileGrid = UiFactory.Grid();
@@ -26,7 +26,9 @@ namespace ZyperWin__
         private DiskAnalysisResult analysis;
         private DiskNode currentNode;
 
-        public FileManagerDashboard()
+        private string selectedExtension;
+
+        public DiskVisualizationDashboard()
         {
             Dock = DockStyle.Fill;
             BackColor = AppPalette.Canvas;
@@ -123,6 +125,7 @@ namespace ZyperWin__
             scanButton.Click += async delegate { await ScanAsync(); };
             upButton.Click += delegate { NavigateToParent(); };
             fileGrid.CellDoubleClick += FileGrid_CellDoubleClick;
+            extensionGrid.CellClick += ExtensionGrid_CellClick;
             treemap.NodeSelected += Treemap_NodeSelected;
         }
 
@@ -202,6 +205,7 @@ namespace ZyperWin__
                     new Progress<string>(value => status.Text = DisplayFormat.SingleLine(value, 190)),
                     cancellation.Token);
                 currentNode = analysis.Root;
+                selectedExtension = null;
                 ShowNode(currentNode);
                 PopulateExtensions();
                 status.Text = string.Format(
@@ -248,7 +252,7 @@ namespace ZyperWin__
                     child.LastWriteTime == DateTime.MinValue ? "--" : child.LastWriteTime.ToString("yyyy/M/d HH:mm"));
                 fileGrid.Rows[index].Tag = child;
             }
-            treemap.Root = node;
+            treemap.Root = FilterNode(node, selectedExtension);
             upButton.Enabled = analysis != null && node != analysis.Root;
         }
 
@@ -256,6 +260,8 @@ namespace ZyperWin__
         {
             extensionGrid.Rows.Clear();
             long total = Math.Max(1, analysis.Root.Size);
+            int allIndex = extensionGrid.Rows.Add("全部", string.Empty, DisplayFormat.Bytes(analysis.Root.Size), "100.0%", analysis.Root.FileCount.ToString("N0"));
+            extensionGrid.Rows[allIndex].Tag = string.Empty;
             foreach (ExtensionUsage usage in analysis.Extensions)
             {
                 int index = extensionGrid.Rows.Add(
@@ -266,6 +272,40 @@ namespace ZyperWin__
                     usage.FileCount.ToString("N0"));
                 extensionGrid.Rows[index].Tag = usage.Extension;
             }
+        }
+
+        private void ExtensionGrid_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || currentNode == null) return;
+            selectedExtension = Convert.ToString(extensionGrid.Rows[e.RowIndex].Tag);
+            treemap.Root = FilterNode(currentNode, selectedExtension);
+            status.Text = string.IsNullOrWhiteSpace(selectedExtension)
+                ? "方格图已显示全部文件类型。"
+                : "方格图仅显示 " + selectedExtension + " 文件，再次点击“全部”可恢复。";
+        }
+
+        private static DiskNode FilterNode(DiskNode node, string extension)
+        {
+            if (node == null || string.IsNullOrWhiteSpace(extension)) return node;
+            if (!node.IsDirectory)
+                return string.Equals(node.Extension, extension, StringComparison.OrdinalIgnoreCase) ? node : null;
+
+            var filtered = new DiskNode
+            {
+                Name = node.Name,
+                FullPath = node.FullPath,
+                IsDirectory = true,
+                LastWriteTime = node.LastWriteTime
+            };
+            foreach (DiskNode child in node.Children)
+            {
+                DiskNode match = FilterNode(child, extension);
+                if (match == null || match.Size <= 0) continue;
+                filtered.Children.Add(match);
+                filtered.Size += match.Size;
+                filtered.FileCount += match.FileCount;
+            }
+            return filtered;
         }
 
         private void FileGrid_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
@@ -327,6 +367,12 @@ namespace ZyperWin__
         {
             int bars = Math.Max(0, Math.Min(10, (int)Math.Round(percent / 10d)));
             return new string('■', bars) + new string('□', 10 - bars);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && cancellation != null) cancellation.Cancel();
+            base.Dispose(disposing);
         }
     }
 
