@@ -13,6 +13,7 @@ namespace ZyperWin__
         [STAThread]
         private static int Main(string[] args)
         {
+            AppDomain.CurrentDomain.AssemblyResolve += ResolveEmbeddedAssembly;
             try
             {
                 return RunApplication(args);
@@ -29,7 +30,6 @@ namespace ZyperWin__
 
         private static int RunApplication(string[] args)
         {
-            AppDomain.CurrentDomain.AssemblyResolve += ResolveEmbeddedAssembly;
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             if (Array.Exists(args ?? new string[0], value => string.Equals(value, "--smoke-test", StringComparison.OrdinalIgnoreCase)))
