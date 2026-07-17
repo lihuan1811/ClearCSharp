@@ -225,7 +225,7 @@ namespace ZyperWin__
             if (string.Equals(Path.GetFileName(executable), "msiexec.exe", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(Path.GetFileName(executable), "msiexec", StringComparison.OrdinalIgnoreCase))
             {
-                arguments = arguments.Replace("/I", "/X").Replace("/i", "/x");
+                if (arguments.StartsWith("/I", StringComparison.OrdinalIgnoreCase)) arguments = "/X" + arguments.Substring(2);
             }
 
             try
@@ -270,16 +270,27 @@ namespace ZyperWin__
             {
                 try
                 {
-                    string backupDirectory = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "CDiskGlow",
-                        "registry_backups");
-                    Directory.CreateDirectory(backupDirectory);
-                    string safeName = string.Concat(app.Name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
-                    string backup = Path.Combine(backupDirectory, safeName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".reg");
-                    ProcessResult export = ProcessRunner.Run("reg.exe", "export \"" + app.RegistryPath + "\" \"" + backup + "\" /y", 60000, cancellationToken);
-                    if (export.Success) messages.Add("已备份卸载注册表：" + backup);
-                    else errors.Add("注册表备份失败：" + export.Error);
+                    ProcessResult query = ProcessRunner.Run("reg.exe", "query \"" + app.RegistryPath + "\"", 30000, cancellationToken);
+                    if (!query.Success) messages.Add("卸载注册表项已不存在。");
+                    else
+                    {
+                        string backupDirectory = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "CDiskGlow",
+                            "registry_backups");
+                        Directory.CreateDirectory(backupDirectory);
+                        string safeName = string.Concat(app.Name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+                        string backup = Path.Combine(backupDirectory, safeName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".reg");
+                        ProcessResult export = ProcessRunner.Run("reg.exe", "export \"" + app.RegistryPath + "\" \"" + backup + "\" /y", 60000, cancellationToken);
+                        if (!export.Success) errors.Add("注册表备份失败：" + export.Error);
+                        else
+                        {
+                            messages.Add("已备份卸载注册表：" + backup);
+                            ProcessResult remove = ProcessRunner.Run("reg.exe", "delete \"" + app.RegistryPath + "\" /f", 60000, cancellationToken);
+                            if (remove.Success) messages.Add("已删除卸载注册表残留。");
+                            else errors.Add("删除卸载注册表残留失败：" + remove.Error);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -287,8 +298,10 @@ namespace ZyperWin__
                 }
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             RemoveStartupResiduals(app, Registry.CurrentUser, messages, errors);
             RemoveStartupResiduals(app, Registry.LocalMachine, messages, errors);
+            cancellationToken.ThrowIfCancellationRequested();
             RemoveShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), messages, errors);
             RemoveShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory), messages, errors);
             RemoveShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.StartMenu), messages, errors);
@@ -360,15 +373,18 @@ namespace ZyperWin__
         {
             string text = value ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(app.InstallLocation) && text.IndexOf(app.InstallLocation, StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            return !string.IsNullOrWhiteSpace(app.Name) && text.IndexOf(app.Name, StringComparison.CurrentCultureIgnoreCase) >= 0;
+            string name = (app.Name ?? string.Empty).Trim();
+            return name.Length >= 4 && text.IndexOf(name, StringComparison.CurrentCultureIgnoreCase) >= 0;
         }
 
         private static bool IsSafeInstallLocation(string location)
         {
             if (string.IsNullOrWhiteSpace(location) || !Directory.Exists(location)) return false;
             string full;
-            try { full = Path.GetFullPath(location).TrimEnd(Path.DirectorySeparatorChar); }
+            try { full = Path.GetFullPath(Environment.ExpandEnvironmentVariables(location)).TrimEnd(Path.DirectorySeparatorChar); }
             catch { return false; }
+            string windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            if (IsSameOrChild(full, windows)) return false;
             string[] protectedRoots =
             {
                 Path.GetPathRoot(full),
@@ -380,6 +396,14 @@ namespace ZyperWin__
             return protectedRoots
                 .Where(root => !string.IsNullOrWhiteSpace(root))
                 .All(root => !string.Equals(full, Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsSameOrChild(string path, string root)
+        {
+            if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(root)) return false;
+            string normalizedPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            string normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            return normalizedPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

@@ -17,6 +17,10 @@ namespace ZyperWin__
     public partial class Optimize : UserControl
     {
         private string xmlFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Bin", "ZyperData.xml");
+        private static readonly string OptimizationJournalPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CDiskGlow",
+            "optimization_journal.txt");
         private Dictionary<string, bool> optimizationStatus = new Dictionary<string, bool>();
         private XDocument xmlDoc;
         [DllImport("user32.dll")]
@@ -1352,6 +1356,7 @@ namespace ZyperWin__
             int selectedCount = 0;
             int alreadyOptimizedCount = 0;
             bool actuallyOptimizedExplorerItem = false;
+            var newlyOptimizedTags = new List<string>();
 
             // 检查是否包含需要重启资源管理器的项目
             foreach (var category in tree1.Items)
@@ -1381,6 +1386,10 @@ namespace ZyperWin__
                         if (isAlreadyOptimized)
                         {
                             alreadyOptimizedCount++;
+                        }
+                        else
+                        {
+                            newlyOptimizedTags.Add(itemTag);
                         }
                     }
                 }
@@ -1416,6 +1425,9 @@ namespace ZyperWin__
                 {
                     // 冻结所有控件
                     SetControlsEnabled(false);
+
+                    // 先记录计划修改项；即使中途失败，全局还原仍会覆盖已执行部分。
+                    AddOptimizationJournal(newlyOptimizedTags);
 
                     // 异步执行优化
                     await PerformOptimizationWithProgress(false);
@@ -1470,6 +1482,7 @@ namespace ZyperWin__
             bool hasSelectedItems = false;
             int selectedCount = 0;
             bool actuallyRestoredExplorerItem = false;
+            var restoredTags = new List<string>();
 
             foreach (var category in tree1.Items)
             {
@@ -1484,6 +1497,7 @@ namespace ZyperWin__
                     {
                         hasSelectedItems = true;
                         selectedCount++;
+                        if (item.Tag != null) restoredTags.Add(item.Tag.ToString());
 
                         // 如果选中了外观/资源管理器分类的项目，标记需要重启
                         if (isExplorerCategory)
@@ -1523,6 +1537,7 @@ namespace ZyperWin__
 
                     // 关键修改：还原完成后立即刷新检测状态
                     CheckAllOptimizationStatus();
+                    RemoveOptimizationJournal(restoredTags);
 
                     // 修正：只有还原了外观项目才重启
                     if (actuallyRestoredExplorerItem)
@@ -1554,6 +1569,78 @@ namespace ZyperWin__
                     SetControlsEnabled(true);
                 }
             }
+        }
+
+        public static int JournaledOptimizationCount()
+        {
+            return ReadOptimizationJournal().Count;
+        }
+
+        public async Task<int> RestoreJournaledOptimizationsAsync()
+        {
+            HashSet<string> journal = ReadOptimizationJournal();
+            if (journal.Count == 0) return 0;
+
+            int selectedCount = 0;
+            foreach (var category in tree1.Items)
+            {
+                category.Checked = false;
+                foreach (var item in category.Sub)
+                {
+                    string tag = item.Tag == null ? string.Empty : item.Tag.ToString();
+                    item.Checked = journal.Contains(tag);
+                    if (item.Checked) selectedCount++;
+                }
+            }
+            if (selectedCount == 0) return 0;
+
+            SetControlsEnabled(false);
+            try
+            {
+                await PerformOptimizationWithProgress(true);
+                CheckAllOptimizationStatus();
+                RemoveOptimizationJournal(journal);
+                OperationLogger.Info("系统优化", "全局还原 " + selectedCount + " 个由本程序记录的优化项");
+                return selectedCount;
+            }
+            finally
+            {
+                SetControlsEnabled(true);
+            }
+        }
+
+        private static HashSet<string> ReadOptimizationJournal()
+        {
+            try
+            {
+                if (!File.Exists(OptimizationJournalPath)) return new HashSet<string>(StringComparer.Ordinal);
+                return new HashSet<string>(File.ReadAllLines(OptimizationJournalPath).Where(value => !string.IsNullOrWhiteSpace(value)), StringComparer.Ordinal);
+            }
+            catch
+            {
+                return new HashSet<string>(StringComparer.Ordinal);
+            }
+        }
+
+        private static void AddOptimizationJournal(IEnumerable<string> tags)
+        {
+            HashSet<string> journal = ReadOptimizationJournal();
+            foreach (string tag in tags.Where(value => !string.IsNullOrWhiteSpace(value))) journal.Add(tag);
+            WriteOptimizationJournal(journal);
+        }
+
+        private static void RemoveOptimizationJournal(IEnumerable<string> tags)
+        {
+            HashSet<string> journal = ReadOptimizationJournal();
+            foreach (string tag in tags) journal.Remove(tag);
+            WriteOptimizationJournal(journal);
+        }
+
+        private static void WriteOptimizationJournal(IEnumerable<string> tags)
+        {
+            string directory = Path.GetDirectoryName(OptimizationJournalPath);
+            Directory.CreateDirectory(directory);
+            File.WriteAllLines(OptimizationJournalPath, tags.OrderBy(value => value).ToArray());
         }
 
         // 冻结或恢复所有控件

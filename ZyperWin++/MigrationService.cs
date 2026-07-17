@@ -82,6 +82,11 @@ namespace ZyperWin__
             }, cancellationToken);
         }
 
+        public static int MigratedRecordCount()
+        {
+            return ReadRecords().Count;
+        }
+
         public static IList<MigrationFolder> Catalog()
         {
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -244,7 +249,10 @@ namespace ZyperWin__
             try
             {
                 if (string.IsNullOrWhiteSpace(targetRoot)) throw new IOException("请选择迁移目标目录。");
-                normalized = Path.GetFullPath(targetRoot).TrimEnd(Path.DirectorySeparatorChar);
+                normalized = Path.GetFullPath(targetRoot);
+                string targetRootOnly = Path.GetPathRoot(normalized);
+                if (!string.Equals(normalized, targetRootOnly, StringComparison.OrdinalIgnoreCase))
+                    normalized = normalized.TrimEnd(Path.DirectorySeparatorChar);
                 Directory.CreateDirectory(normalized);
                 var drive = new DriveInfo(Path.GetPathRoot(normalized));
                 if (!drive.IsReady || drive.DriveType != DriveType.Fixed) throw new IOException("迁移目标必须是可用的本地固定磁盘。");

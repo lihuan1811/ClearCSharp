@@ -41,6 +41,16 @@ namespace ZyperWin__
 
         private static int RunSmokeTest()
         {
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs args)
+            {
+                WriteSmokeError(args.Exception);
+                Environment.Exit(1);
+            };
+            AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs args)
+            {
+                WriteSmokeError(args.ExceptionObject as Exception ?? new Exception(Convert.ToString(args.ExceptionObject)));
+            };
             try
             {
                 using (var shell = new MainWindow())
@@ -60,7 +70,6 @@ namespace ZyperWin__
                 {
                     using (module)
                     {
-                        module.CreateControl();
                         module.PerformLayout();
                     }
                 }
@@ -69,9 +78,15 @@ namespace ZyperWin__
             }
             catch (Exception ex)
             {
-                File.WriteAllText("smoke-test-error.txt", ex.ToString());
+                WriteSmokeError(ex);
                 return 1;
             }
+        }
+
+        private static void WriteSmokeError(Exception exception)
+        {
+            try { File.WriteAllText("smoke-test-error.txt", exception == null ? "Unknown smoke-test error." : exception.ToString()); }
+            catch { }
         }
 
         private static Assembly ResolveEmbeddedAssembly(object sender, ResolveEventArgs args)

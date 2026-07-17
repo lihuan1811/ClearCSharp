@@ -180,6 +180,11 @@ namespace ZyperWin__
                                 ModifiedAt = info.LastWriteTime,
                                 Type = detected
                             });
+                            if (limit > 0 && files.Count >= limit * 2)
+                            {
+                                files.Sort(delegate(ManagedFileEntry left, ManagedFileEntry right) { return right.Size.CompareTo(left.Size); });
+                                files.RemoveRange(limit, files.Count - limit);
+                            }
                         }
                         catch
                         {

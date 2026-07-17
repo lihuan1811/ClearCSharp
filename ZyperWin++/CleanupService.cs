@@ -378,20 +378,32 @@ namespace ZyperWin__
 
         private static void RemoveEmptyDirectories(string root, CancellationToken cancellationToken)
         {
-            string[] directories;
-            try { directories = Directory.GetDirectories(root, "*", SearchOption.AllDirectories); }
-            catch { return; }
-
-            foreach (string directory in directories.OrderByDescending(value => value.Length))
+            var pending = new Stack<string>();
+            var directories = new List<string>();
+            pending.Push(root);
+            while (pending.Count > 0)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                string current = pending.Pop();
                 try
                 {
-                    if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory, false);
+                    foreach (string child in Directory.GetDirectories(current))
+                    {
+                        if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0) continue;
+                        directories.Add(child);
+                        pending.Push(child);
+                    }
                 }
                 catch
                 {
                 }
+            }
+
+            foreach (string directory in directories.OrderByDescending(value => value.Length))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try { if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory, false); }
+                catch { }
             }
         }
     }

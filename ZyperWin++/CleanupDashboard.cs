@@ -28,7 +28,7 @@ namespace ZyperWin__
 
             FlowLayoutPanel headerActions;
             Panel header = UiFactory.Header(
-                "C 盘深度清理",
+                "C盘深度清理",
                 "按过期文件、系统相关、缓存、应用和临时文件细分；高风险目录只分析。",
                 out headerActions);
             selectNoneButton.Width = 82;
@@ -193,7 +193,7 @@ namespace ZyperWin__
                         result.Rule.Name,
                         result.Rule.Description,
                         result.Rule.Risk,
-                        DisplayFormat.Bytes(result.Bytes),
+                        result.Rule.ScanOnly ? "仅分析 " + DisplayFormat.Bytes(result.Bytes) : DisplayFormat.Bytes(result.Bytes),
                         result.FileCount.ToString("N0"),
                         result.Roots.Count == 0 ? "未找到" : string.Join("；", result.Roots));
                     grid.Rows[index].Tag = result;
@@ -203,10 +203,11 @@ namespace ZyperWin__
                         grid.Rows[index].DefaultCellStyle.ForeColor = AppPalette.Muted;
                     }
                 }
-                long total = results.Sum(value => value.Bytes);
+                long detected = results.Sum(value => value.Bytes);
+                long cleanable = results.Where(value => !value.Rule.ScanOnly).Sum(value => value.Bytes);
                 int files = results.Sum(value => value.FileCount);
-                status.Text = string.Format("扫描完成：{0:N0} 个文件，可释放 {1}。", files, DisplayFormat.Bytes(total));
-                OperationLogger.Info("清理扫描", "C 盘深度清理，可释放 " + DisplayFormat.Bytes(total));
+                status.Text = string.Format("扫描完成：{0:N0} 个文件，检测 {1}，可清理 {2}。", files, DisplayFormat.Bytes(detected), DisplayFormat.Bytes(cleanable));
+                OperationLogger.Info("清理扫描", "C盘深度清理，检测 " + DisplayFormat.Bytes(detected) + "，可清理 " + DisplayFormat.Bytes(cleanable));
             }
             catch (OperationCanceledException)
             {
@@ -253,7 +254,7 @@ namespace ZyperWin__
             if (answer != DialogResult.Yes) return;
 
             cancellation = new CancellationTokenSource();
-            SetBusy(true, "清理中...");
+            SetBusy(true, "取消清理");
             progress.Style = ProgressBarStyle.Marquee;
             try
             {
