@@ -35,7 +35,13 @@ jobs:
           if ($exe.Length -lt 2500000) {
             throw "Executable is too small; embedded AntdUI dependency is likely missing."
           }
-          & mt.exe -nologo "-inputresource:$($exe.FullName);#1" -out:embedded.manifest
+          $mt = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter mt.exe -Recurse |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $mt) {
+            throw "Windows SDK manifest tool was not found."
+          }
+          & $mt.FullName -nologo "-inputresource:$($exe.FullName);#1" -out:embedded.manifest
           $manifest = Get-Content embedded.manifest -Raw
           if ($manifest -notmatch 'requireAdministrator') {
             throw "Administrator manifest was not embedded."
