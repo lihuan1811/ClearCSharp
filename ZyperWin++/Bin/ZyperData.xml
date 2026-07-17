@@ -1,0 +1,1529 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ZyperConfigurations>
+  <!-- 外观/资源管理器配置 -->
+  <Configuration category="explorer">
+    <Item name="1、隐藏任务栏搜索框" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" checkValue="SearchboxTaskbarMode" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" Value="SearchboxTaskbarMode" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" Value="SearchboxTaskbarMode"/>
+      </Restore>
+    </Item>
+
+    <Item name="2、隐藏“任务视图”按钮" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" checkValue="ShowTaskViewButton" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="ShowTaskViewButton" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="ShowTaskViewButton"/>
+      </Restore>
+    </Item>
+
+    <Item name="3、始终在任务栏显示所有图标和通知" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer" checkValue="EnableAutoTray" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer" Value="EnableAutoTray" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer" Value="EnableAutoTray"/>
+      </Restore>
+    </Item>
+
+    <Item name="4、任务栏窗口被占满时合并" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" checkValue="TaskbarGlomLevel" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="TaskbarGlomLevel" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="TaskbarGlomLevel" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="5、提高前台程序的显示速度" checkKey="HKEY_CURRENT_USER\Control Panel\Desktop" checkValue="ForegroundLockTimeout" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Control Panel\Desktop" Value="ForegroundLockTimeout" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Control Panel\Desktop" Value="ForegroundLockTimeout" Type="REG_DWORD" Data="100"/>
+      </Restore>
+    </Item>
+
+    <Item name="6、不要显示窗口出现和消失动画" checkKey="HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" checkValue="MinAnimate" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" Value="MinAnimate" Type="REG_SZ" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" Value="MinAnimate" Type="REG_SZ" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="7、使「开始」菜单、任务栏、操作中心透明" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" checkValue="EnableTransparency" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" Value="EnableTransparency" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" Value="EnableTransparency" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="8、打开资源管理器时显示此电脑" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" checkValue="LaunchTo" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="LaunchTo" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="LaunchTo" Type="REG_DWORD" Data="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="9、总是从内存中卸载无用的DLL" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" checkValue="AlwaysUnloadDll" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" Value="AlwaysUnloadDll" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" Value="AlwaysUnloadDll" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="10、记事本启用自动换行" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Notepad" checkValue="fWrap" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Notepad" Value="fWrap" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Notepad" Value="fWrap" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="11、记事本始终显示状态栏" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Notepad" checkValue="StatusBar" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Notepad" Value="StatusBar" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Notepad" Value="StatusBar" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="12、禁止跟踪损坏的快捷方式" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" checkValue="NoResolveTrack" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="NoResolveTrack" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="NoResolveTrack"/>
+      </Restore>
+    </Item>
+
+    <Item name="13、优化Windows文件列表刷新策略" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" checkValue="NoSimpleNetIDList" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="NoSimpleNetIDList" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="NoSimpleNetIDList"/>
+      </Restore>
+    </Item>
+
+    <Item name="14、显示已知文件类型的扩展名" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" checkValue="HideFileExt" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="HideFileExt" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="HideFileExt" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="15、不要保留“最近打开的文件”历史记录" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" checkValue="NoRecentDocsHistory" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="NoRecentDocsHistory" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="NoRecentDocsHistory" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="NoRecentDocsHistory"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="NoRecentDocsHistory"/>
+      </Restore>
+    </Item>
+
+    <Item name="16、退出时清除“最近打开的文件”历史记录" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" checkValue="ClearRecentDocsOnExit" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="ClearRecentDocsOnExit" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="ClearRecentDocsOnExit" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="ClearRecentDocsOnExit"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="ClearRecentDocsOnExit"/>
+      </Restore>
+    </Item>
+
+    <Item name="17、创建快捷方式时不添加“快捷方式”字样" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer" checkValue="Link" optimizedValue="00000000">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer" Value="Link" Type="REG_BINARY" Data="00000000"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer" Value="Link"/>
+      </Restore>
+    </Item>
+
+    <Item name="18、禁止自动播放" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" checkValue="DisableAutoplay" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" Value="DisableAutoplay" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" Value="DisableAutoplay" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+<Item name="19、在单独的进程中打开文件夹窗口" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" checkValue="SeparateProcess" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="SeparateProcess" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="SeparateProcess" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="20、标题栏显示完整路径" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\CabinetState" checkValue="FullPath" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\CabinetState" Value="FullPath" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\CabinetState" Value="FullPath" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="21、快速访问不显示常用文件夹" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" checkValue="ShowFrequent" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" Value="ShowFrequent" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" Value="ShowFrequent"/>
+      </Restore>
+    </Item>
+
+    <Item name="22、快速访问不显示最近使用的文件" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" checkValue="ShowRecent" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" Value="ShowRecent" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" Value="ShowRecent"/>
+      </Restore>
+    </Item>
+
+    <Item name="23、资源管理器崩溃时自动重启" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" checkValue="AutoRestartShell" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" Value="AutoRestartShell" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" Value="AutoRestartShell" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="24、桌面显示此电脑" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" checkValue="{20D04FE0-3AEA-1069-A2D8-08002B30309D}" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" Value="{20D04FE0-3AEA-1069-A2D8-08002B30309D}" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" Value="{20D04FE0-3AEA-1069-A2D8-08002B30309D}" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="25、桌面显示回收站" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" checkValue="{645FF040-5081-101B-9F08-00AA002F954E}" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" Value="{645FF040-5081-101B-9F08-00AA002F954E}" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" Value="{645FF040-5081-101B-9F08-00AA002F954E}" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="26、隐藏桌面上的“了解此图片”图标" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" checkValue="{2cc5ca98-6485-489a-920e-b3e88a6ccce3}" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" Value="{2cc5ca98-6485-489a-920e-b3e88a6ccce3}" Type="REG_DWORD" Data="1"/>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\{2cc5ca98-6485-489a-920e-b3e88a6ccce3}"/>
+        <ExplorerNotify Type="AssocChanged"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" Value="{2cc5ca98-6485-489a-920e-b3e88a6ccce3}"/>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\{2cc5ca98-6485-489a-920e-b3e88a6ccce3}" Value="" Type="REG_SZ" Data="Windows Spotlight"/>
+      </Restore>
+    </Item>
+
+    <Item name="27、微软拼音默认为英文输入" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputMethod\Settings\CHS" checkValue="Default Mode" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputMethod\Settings\CHS" Value="Default Mode" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputMethod\Settings\CHS" Value="Default Mode" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="28、关闭微软拼音云计算" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputMethod\Settings\CHS" checkValue="Enable Cloud Candidate" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputMethod\Settings\CHS" Value="Enable Cloud Candidate" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputMethod\Settings\CHS" Value="Enable Cloud Candidate" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+<Item name="29、去除本地磁盘重复显示" 
+      checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\DelegateFolders\{F5FB2C77-0E2F-4A16-A381-3E560C68BC83}" 
+      checkValue="" 
+      optimizedValue="">
+  <Optimize>
+    <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\DelegateFolders\{F5FB2C77-0E2F-4A16-A381-3E560C68BC83}"/>
+  </Optimize>
+  <Restore>
+    <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\DelegateFolders\{F5FB2C77-0E2F-4A16-A381-3E560C68BC83}" Type="String" Data=""/>
+  </Restore>
+</Item>
+
+</Configuration>
+
+  <!-- 性能优化设置 -->
+  <Configuration category="xingneng">
+    <Item name="1、优化进程数量" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control" checkValue="SvcHostSplitThresholdInKB" optimizedValue="4294967295">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control" Value="SvcHostSplitThresholdInKB" Type="REG_DWORD" Data="4294967295"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control" Value="SvcHostSplitThresholdInKB"/>
+      </Restore>
+    </Item>
+
+    <Item name="2、不允许在「开始」菜单显示建议" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" checkValue="SubscribedContent-338388Enabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="SubscribedContent-338388Enabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="SubscribedContent-338389Enabled" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="SubscribedContent-338388Enabled"/>
+        <RegDelete Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="SubscribedContent-338389Enabled" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="3、不要在应用商店中查找关联应用" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Explorer" checkValue="NoUseStoreOpenWith" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Explorer" Value="NoUseStoreOpenWith" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Explorer" Value="NoUseStoreOpenWith"/>
+      </Restore>
+    </Item>
+
+    <Item name="4、关闭商店应用推广" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" checkValue="PreInstalledAppsEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="PreInstalledAppsEnabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="PreInstalledAppsEnabled" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="5、禁止应用商店自动下载和安装更新" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\WindowsStore" checkValue="AutoDownload" optimizedValue="2">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\WindowsStore" Value="AutoDownload" Type="REG_DWORD" Data="2"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\WindowsStore" Value="AutoDownload"/>
+      </Restore>
+    </Item>
+
+    <Item name="6、关闭锁屏时的Windows聚焦推广" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" checkValue="RotatingLockScreenEnable" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="RotatingLockScreenEnable" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="RotatingLockScreenEnable" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="7、关闭“使用Windows时获取技巧和建议”" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" checkValue="SoftLandingEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="SoftLandingEnabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="SoftLandingEnabled" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="8、禁止自动安装推荐的应用程序" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" checkValue="SilentInstalledAppsEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="SilentInstalledAppsEnabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="SilentInstalledAppsEnabled" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="9、关闭游戏录制工具" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR" checkValue="AppCaptureEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR" Value="AppCaptureEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_CURRENT_USER\System\GameConfigStore" Value="GameDVR_Enabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR" Value="AppCaptureEnabled"/>
+        <RegDelete Key="HKEY_CURRENT_USER\System\GameConfigStore" Value="GameDVR_Enabled"/>
+      </Restore>
+    </Item>
+
+    <Item name="10、关闭多嘴的小娜" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" checkValue="AllowCortana" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowCortana" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowCortana"/>
+      </Restore>
+    </Item>
+
+    <Item name="11、“运行”对话框不要显示历史记录" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" checkValue="Start_TrackProgs" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="Start_TrackProgs" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="Start_TrackProgs" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="12、隐藏「开始」菜单中的“推荐”" checkKey="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\Explorer" checkValue="HideRecommendedSection" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\Explorer" Value="HideRecommendedSection" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Explorer" Value="HideRecommendedSection" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\Explorer" Value="HideRecommendedSection"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Explorer" Value="HideRecommendedSection"/>
+      </Restore>
+    </Item>
+
+    <Item name="13、隐藏「开始」菜单历史记录中推荐的网站" checkKey="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\Explorer" checkValue="HideRecommendedPersonalizedSites" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\Explorer" Value="HideRecommendedPersonalizedSites" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Explorer" Value="HideRecommendedPersonalizedSites" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\Explorer" Value="HideRecommendedPersonalizedSites"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Explorer" Value="HideRecommendedPersonalizedSites"/>
+      </Restore>
+    </Item>
+
+    <Item name="14、加快关机速度" checkKey="HKEY_CURRENT_USER\Control Panel\Desktop" checkValue="AutoEndTasks" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Control Panel\Desktop" Value="AutoEndTasks" Type="REG_SZ" Data="1"/>
+        <RegWrite Key="HKEY_CURRENT_USER\Control Panel\Desktop" Value="HungAppTimeout" Type="REG_SZ" Data="3000"/>
+        <RegWrite Key="HKEY_CURRENT_USER\Control Panel\Desktop" Value="WaitToKillAppTimeout" Type="REG_SZ" Data="1000"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Control Panel\Desktop" Value="AutoEndTasks" Type="REG_SZ" Data="0"/>
+        <RegWrite Key="HKEY_CURRENT_USER\Control Panel\Desktop" Value="HungAppTimeout" Type="REG_SZ" Data="5000"/>
+        <RegWrite Key="HKEY_CURRENT_USER\Control Panel\Desktop" Value="WaitToKillAppTimeout" Type="REG_SZ" Data="9000"/>
+      </Restore>
+    </Item>
+
+    <Item name="15、缩短关闭服务等待时间" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control" checkValue="WaitToKillServiceTimeout" optimizedValue="1000">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control" Value="WaitToKillServiceTimeout" Type="REG_SZ" Data="1000"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control" Value="WaitToKillServiceTimeout" Type="REG_SZ" Data="5000"/>
+      </Restore>
+    </Item>
+
+    <Item name="16、关闭远程协助" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Remote Assistance" checkValue="fAllowToGetHelp" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Remote Assistance" Value="fAllowToGetHelp" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Remote Assistance" Value="fAllowToGetHelp" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="17、禁用远程修改注册表" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\RemoteRegistry" checkValue="Start" optimizedValue="4">
+      <Optimize>
+        <SetServiceStart Name="RemoteRegistry" Type="4"/>
+      </Optimize>
+      <Restore>
+        <SetServiceStart Name="RemoteRegistry" Type="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="18、禁用诊断服务" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\DPS" checkValue="Start" optimizedValue="4">
+      <Optimize>
+        <SetServiceStart Name="DPS" Type="4"/>
+      </Optimize>
+      <Restore>
+        <SetServiceStart Name="DPS" Type="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="19、禁用SysMain" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\SysMain" checkValue="Start" optimizedValue="4">
+      <Optimize>
+        <SetServiceStart Name="SysMain" Type="4"/>
+      </Optimize>
+      <Restore>
+        <SetServiceStart Name="SysMain" Type="3"/>
+      </Restore>
+    </Item>
+
+    <Item name="20、禁用Windows Search" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\WSearch" checkValue="Start" optimizedValue="4">
+      <Optimize>
+        <SetServiceStart Name="WSearch" Type="4"/>
+      </Optimize>
+      <Restore>
+        <SetServiceStart Name="WSearch" Type="5"/>
+      </Restore>
+    </Item>
+
+    <Item name="21、禁用错误报告" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\WerSvc" checkValue="Start" optimizedValue="4">
+      <Optimize>
+        <SetServiceStart Name="WerSvc" Type="4"/>
+      </Optimize>
+      <Restore>
+        <SetServiceStart Name="WerSvc" Type="3"/>
+      </Restore>
+    </Item>
+
+    <Item name="22、禁用家庭组" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\HomeGroupProvider" checkValue="Start" optimizedValue="4">
+      <Optimize>
+        <SetServiceStart Name="HomeGroupProvider" Type="4"/>
+      </Optimize>
+      <Restore>
+        <SetServiceStart Name="HomeGroupProvider" Type="3"/>
+      </Restore>
+    </Item>
+
+    <Item name="23、禁用客户体验改善计划" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\SQMClient\Windows" checkValue="CEIPEnable" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\SQMClient\Windows" Value="CEIPEnable" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\SQMClient\Windows" Value="CEIPEnable"/>
+      </Restore>
+    </Item>
+
+    <Item name="24、禁用NTFS链接跟踪服务" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\TrkWks" checkValue="Start" optimizedValue="4">
+      <Optimize>
+        <SetServiceStart Name="TrkWks" Type="4"/>
+      </Optimize>
+      <Restore>
+        <SetServiceStart Name="TrkWks" Type="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="25、禁止自动维护计划" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\ScheduledDiagnostics" checkValue="EnabledExecution" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\ScheduledDiagnostics" Value="EnabledExecution" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\ScheduledDiagnostics" Value="EnabledExecution" Type="REG_DWORD"/>
+      </Restore>
+    </Item>
+
+    <Item name="26、启用大系统缓存以提高性能" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" checkValue="LargeSystemCache" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" Value="LargeSystemCache" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" Value="LargeSystemCache" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="27、禁止系统内核与驱动程序分页到硬盘" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" checkValue="DisablePagingExecutive" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" Value="DisablePagingExecutive" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" Value="DisablePagingExecutive" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="28、增加文件管理系统缓存以提高性能" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" checkValue="IoPageLockLimit" optimizedValue="10000000">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" Value="IoPageLockLimit" Type="REG_DWORD" Data="10000000"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" Value="IoPageLockLimit" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+<Item name="29、启用高性能电源计划" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes" checkValue="ActivePowerScheme" optimizedValue="8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c">
+  <Optimize>
+    <ExplorerNotify Type="Cmd" Cmd="powercfg.exe -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"/>
+  </Optimize>
+  <Restore>
+    <ExplorerNotify Type="Cmd" Cmd="powercfg.exe -setactive 381b4222-f694-41f0-9685-ff5bb260df2e"/>
+  </Restore>
+</Item>
+
+    <Item name="30、禁用处理器的幽灵和熔断补丁以提高性能" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" checkValue="FeatureSettingsOverride" optimizedValue="3">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" Value="FeatureSettingsOverride" Type="REG_DWORD" Data="3"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" Value="FeatureSettingsOverrideMask" Type="REG_DWORD" Data="3"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" Value="FeatureSettingsOverride"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" Value="FeatureSettingsOverrideMask"/>
+      </Restore>
+    </Item>
+
+    <Item name="31、禁用保留的存储" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager" checkValue="MiscPolicyInfo" optimizedValue="2">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager" Value="MiscPolicyInfo" Type="REG_DWORD" Data="2"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager" Value="PassedPolicy" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager" Value="ShippedWithReserves" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager" Value="MiscPolicyInfo" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager" Value="PassedPolicy" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager" Value="ShippedWithReserves" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+<Item name="32、优化处理器性能" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\PriorityControl" checkValue="Win32PrioritySeparation" optimizedValue="38">
+  <Optimize>
+    <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\PriorityControl" Value="Win32PrioritySeparation" Type="REG_DWORD" Data="38"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\PriorityControl" Value="IRQ8Priority" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\PriorityControl" Value="IRQ16Priority" Type="REG_DWORD" Data="2"/>
+  </Optimize>
+  <Restore>
+    <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\PriorityControl" Value="Win32PrioritySeparation" Type="REG_DWORD" Data="2"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\PriorityControl" Value="IRQ8Priority"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\PriorityControl" Value="IRQ16Priority"/>
+  </Restore>
+</Item>
+
+    <Item name="33、加快预读能力改善速度" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" checkValue="EnablePrefetcher" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" Value="EnablePrefetcher" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" Value="EnableSuperfetch" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" Value="EnablePrefetcher" Type="REG_DWORD" Data="3"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" Value="EnableSuperfetch" Type="REG_DWORD" Data="3"/>
+      </Restore>
+    </Item>
+
+    <Item name="34、禁止系统自动生成错误报告" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PCHealth\ErrorReporting" checkValue="DoReport" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PCHealth\ErrorReporting" Value="DoReport" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PCHealth\ErrorReporting" Value="ShowUI" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PCHealth\ErrorReporting" Value="DoReport"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\PCHealth\ErrorReporting" Value="ShowUI"/>
+      </Restore>
+    </Item>
+
+    <Item name="35、禁用高精度事件定时器（HPET）" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\hpet" checkValue="Start" optimizedValue="4">
+  <Optimize>
+    <SetServiceStart Name="hpet" Type="4"/>
+    <ExplorerNotify Type="Cmd" Cmd="net stop hpet" SkipError="2"/>
+  </Optimize>
+  <Restore>
+    <SetServiceStart Name="hpet" Type="2"/>
+    <ExplorerNotify Type="Cmd" Cmd="net start hpet" SkipError="2"/>
+  </Restore>
+</Item>
+
+    <Item name="36、关闭系统自动调试功能，提高系统运行速度" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug" checkValue="Auto" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug" Value="Auto" Type="REG_SZ" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug" Value="Auto" Type="REG_SZ" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug" Value="Auto" Type="REG_SZ" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug" Value="Auto" Type="REG_SZ" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="37、关闭程序兼容性助手" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\services\PcaSvc" checkValue="Start" optimizedValue="4">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\services\PcaSvc" Value="Start" Type="REG_DWORD" Data="4"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\PcaSvc" Value="Start" Type="REG_DWORD" Data="4"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\services\PcaSvc" Value="Start" Type="REG_DWORD" Data="2"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\PcaSvc" Value="Start" Type="REG_DWORD" Data="2"/>
+      </Restore>
+    </Item>
+
+<Item name="38、启用自动完成设备设置" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" checkValue="DisableAutomaticRestartSignOn" optimizedValue="0">
+  <Optimize>
+    <RegWrite Type="DWORD" Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="DisableAutomaticRestartSignOn" Data="0"/>
+  </Optimize>
+  <Restore>
+    <RegWrite Type="DWORD" Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="DisableAutomaticRestartSignOn" Data="1"/>
+  </Restore>
+</Item>
+
+    <Item name="39、关闭Exploit Protection（乱序内存）" checkKey="HKEY_LOCAL_MACHINE\System\ControlSet001\Control\Session Manager\kernel" checkValue="MitigationOptions" optimizedValue="22,22,22,00,00,02,00,00,00,02,00,00,00,00,00,00">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\System\ControlSet001\Control\Session Manager\kernel" Value="MitigationOptions" Type="REG_BINARY" Data="22,22,22,00,00,02,00,00,00,02,00,00,00,00,00,00"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\System\ControlSet001\Control\Session Manager\kernel" Value="MitigationOptions"/>
+      </Restore>
+    </Item>
+
+    <Item name="40、优化Windows Search和小娜的设置" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" checkValue="BingSearchEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="BingSearchEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="DisableWebSearch" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="ConnectedSearchUseWeb" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="ConnectedSearchUseWebOverMeteredConnections" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowCloudSearch" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowCortanaAboveLock" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AlwaysUseAutoLangDetection" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowIndexingEncryptedStoresOrItems" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowCortana" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowSearchToUseLocation" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="BingSearchEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="DisableWebSearch"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="ConnectedSearchUseWeb"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="ConnectedSearchUseWebOverMeteredConnections"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowCloudSearch"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowCortanaAboveLock"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AlwaysUseAutoLangDetection"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowIndexingEncryptedStoresOrItems"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowCortana"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search" Value="AllowSearchToUseLocation"/>
+      </Restore>
+    </Item>
+
+    <Item name="41、关闭广告 ID" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo" checkValue="Enabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo" Value="Enabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo" Value="DisabledByGroupPolicy" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo" Value="Enabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo" Value="DisabledByGroupPolicy"/>
+      </Restore>
+    </Item>
+
+<Item name="42、禁用磁盘空间不足警告" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" checkValue="NoLowDiskSpaceChecks" optimizedValue="1">
+  <Optimize>
+    <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="NoLowDiskSpaceChecks" Type="REG_DWORD" Data="1"/>
+  </Optimize>
+  <Restore>
+    <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" Value="NoLowDiskSpaceChecks"/>
+  </Restore>
+</Item>
+
+    <Item name="43、去除搜索页面信息流和热搜" checkKey="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\explorer" checkValue="DisableSearchBoxSuggestions" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\explorer" Value="DisableSearchBoxSuggestions" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\explorer" Value="DisableSearchBoxSuggestions"/>
+      </Restore>
+    </Item>
+
+    <Item name="44、关闭TSX漏洞补丁" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Kernel" checkValue="DisableTsx" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Kernel" Value="DisableTsx" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Kernel" Value="DisableTsx"/>
+      </Restore>
+    </Item>
+
+    <Item name="45、开启GPU硬件加速" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" checkValue="HwSchMode" optimizedValue="2">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" Value="HwSchMode" Type="REG_DWORD" Data="2"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" Value="HwSchMode"/>
+      </Restore>
+    </Item>
+
+</Configuration>
+
+  <!-- 安全设置 -->
+  <Configuration category="safe">
+    <Item name="1、将用户账号控制（UAC）调整为从不通知" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" checkValue="ConsentPromptBehaviorAdmin" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="PromptOnSecureDesktop" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="ConsentPromptBehaviorAdmin" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="ConsentPromptBehaviorUser" Type="REG_DWORD" Data="3"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="PromptOnSecureDesktop" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="ConsentPromptBehaviorAdmin" Type="REG_DWORD" Data="2"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="ConsentPromptBehaviorUser" Type="REG_DWORD" Data="3"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="EnableLUA" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="2、用于内置管理员账户的管理审批模式" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" checkValue="FilterAdministratorToken" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="FilterAdministratorToken" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="FilterAdministratorToken" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="3、以管理审批模式运行所有管理员" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" checkValue="EnableLUA" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="EnableLUA" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="EnableLUA" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="4、仅提升安全路径下的UIAccess程序" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" checkValue="EnableSecureUIAPaths" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="EnableSecureUIAPaths" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="EnableSecureUIAPaths" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="5、允许UIAccess程序在非安全桌面上提升" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" checkValue="EnableUIADesktopToggle" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="EnableUIADesktopToggle" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="EnableUIADesktopToggle" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+
+    <Item name="6、关闭SmartScreen应用筛选器" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" checkValue="SmartScreenEnabled" optimizedValue="off">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" Value="SmartScreenEnabled" Type="REG_SZ" Data="off"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" Value="EnabledV9" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" Value="SmartScreenEnabled" Type="REG_SZ" Data="RequireAdmin"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" Value="EnabledV9"/>
+      </Restore>
+    </Item>
+
+    <Item name="7、关闭打开程序的安全警告" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Associations" checkValue="ModRiskFileTypes" optimizedValue=".bat;.exe;.reg;.vbs;.chm;.msi;.js;.cmd">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Associations" Value="ModRiskFileTypes" Type="REG_SZ" Data=".bat;.exe;.reg;.vbs;.chm;.msi;.js;.cmd"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\Associations" Value="ModRiskFileTypes" Type="REG_SZ" Data=".bat;.exe;.reg;.vbs;.chm;.msi;.js;.cmd"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Associations" Value="ModRiskFileTypes"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\Associations" Value="ModRiskFileTypes"/>
+      </Restore>
+    </Item>
+
+    <Item name="8、关闭防火墙" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile" checkValue="EnableFirewall" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile" Value="EnableFirewall" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\PublicProfile" Value="EnableFirewall" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\DomainProfile" Value="EnableFirewall" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile" Value="EnableFirewall" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\PublicProfile" Value="EnableFirewall" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\DomainProfile" Value="EnableFirewall" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="9、关闭内存完整" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" checkValue="Enabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" Value="Enabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" Value="Enabled" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="10、关闭虚拟化安全性" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard" checkValue="EnableVirtualizationBasedSecurity" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard" Value="EnableVirtualizationBasedSecurity" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard" Value="EnableVirtualizationBasedSecurity" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+</Configuration>
+
+  <!-- Edge优化设置 -->
+  <Configuration category="edge">
+    <Item name="1、不要显示“首次运行”欢迎页面" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" checkValue="HideFirstRunExperience" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\MicrosoftEdge" Value="PreventFirstRunPage" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="HideFirstRunExperience" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="HideFirstRunExperience" Type="REG_DWORD" Data="1" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\MicrosoftEdge" Value="PreventFirstRunPage"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="HideFirstRunExperience"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="HideFirstRunExperience" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="2、Edge浏览器关闭后禁止继续运行后台应用" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" checkValue="BackgroundModeEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="BackgroundModeEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="BackgroundModeEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="BackgroundModeEnabled" Type="REG_DWORD" Data="0" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="BackgroundModeEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="BackgroundModeEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="BackgroundModeEnabled" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="3、禁用启动增强" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" checkValue="StartupBoostEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="StartupBoostEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="StartupBoostEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="StartupBoostEnabled" Type="REG_DWORD" Data="0" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="StartupBoostEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="StartupBoostEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="StartupBoostEnabled" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="4、阻止必应搜索结果中的所有广告" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" checkValue="BingAdsSuppression" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="BingAdsSuppression" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="BingAdsSuppression" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="BingAdsSuppression" Type="REG_DWORD" Data="1" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="BingAdsSuppression"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="BingAdsSuppression"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="BingAdsSuppression" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="5、从新标签页中隐藏默认的热门站点" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" checkValue="NewTabPageHideDefaultTopSites" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="NewTabPageHideDefaultTopSites" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="NewTabPageHideDefaultTopSites" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="NewTabPageHideDefaultTopSites" Type="REG_DWORD" Data="1" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="NewTabPageHideDefaultTopSites"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="NewTabPageHideDefaultTopSites"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="NewTabPageHideDefaultTopSites" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="6、隐藏Edge浏览器边栏" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\Recommended" checkValue="HubsSidebarEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge\Recommended" Value="HubsSidebarEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\Recommended" Value="HubsSidebarEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\Recommended" Value="HubsSidebarEnabled" Type="REG_DWORD" Data="0" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge\Recommended" Value="HubsSidebarEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\Recommended" Value="HubsSidebarEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\Recommended" Value="HubsSidebarEnabled" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="7、关闭Edge浏览器停止支持旧系统的通知" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" checkValue="SuppressUnsupportedOSWarning" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="SuppressUnsupportedOSWarning" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="SuppressUnsupportedOSWarning" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="SuppressUnsupportedOSWarning" Type="REG_DWORD" Data="1" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="SuppressUnsupportedOSWarning"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="SuppressUnsupportedOSWarning"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="SuppressUnsupportedOSWarning" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="8、不要发送任何诊断数据" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" checkValue="DiagnosticData" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="DiagnosticData" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="DiagnosticData" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="DiagnosticData" Type="REG_DWORD" Data="0" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="DiagnosticData"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="DiagnosticData"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="DiagnosticData" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="9、禁用标签页性能检测器" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" checkValue="PerformanceDetectorEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="PerformanceDetectorEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="PerformanceDetectorEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="PerformanceDetectorEnabled" Type="REG_DWORD" Data="0" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="PerformanceDetectorEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="PerformanceDetectorEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="PerformanceDetectorEnabled" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="10、禁用新选项卡页面上的微软资讯内容" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" checkValue="NewTabPageContentEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="NewTabPageContentEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="NewTabPageContentEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="NewTabPageContentEnabled" Type="REG_DWORD" Data="0" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="NewTabPageContentEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="NewTabPageContentEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="NewTabPageContentEnabled" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="11、禁用个性化广告和体验" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" checkValue="PersonalizationReportingEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="PersonalizationReportingEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="PersonalizationReportingEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="PersonalizationReportingEnabled" Type="REG_DWORD" Data="0" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="PersonalizationReportingEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="PersonalizationReportingEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="PersonalizationReportingEnabled" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="12、禁用不安全的下载警告" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" checkValue="ShowDownloadsInsecureWarningsEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="ShowDownloadsInsecureWarningsEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="ShowDownloadsInsecureWarningsEnabled" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="ShowDownloadsInsecureWarningsEnabled" Type="REG_DWORD" Data="0" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge" Value="ShowDownloadsInsecureWarningsEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="ShowDownloadsInsecureWarningsEnabled"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge" Value="ShowDownloadsInsecureWarningsEnabled" Wow64="True" SkipError="2"/>
+      </Restore>
+    </Item>
+
+</Configuration>
+
+  <!-- 系统设置 -->
+  <Configuration category="system">
+    <Item name="1、关闭休眠" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power" checkValue="HibernateEnabled" optimizedValue="0">
+      <Optimize>
+        <ExplorerNotify Type="Cmd" Cmd="powercfg -hibernate off"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power" Value="HibernateEnabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <ExplorerNotify Type="Cmd" Cmd="powercfg -hibernate on"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power" Value="HibernateEnabled" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="2、弹出USB磁盘后彻底断开其电源" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\usbhub\hubg" checkValue="DisableOnSoftRemove" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\usbhub\hubg" Value="DisableOnSoftRemove" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\usbhub\hubg" Value="DisableOnSoftRemove"/>
+      </Restore>
+    </Item>
+
+    <Item name="3、不要将VHD动态文件扩展到最大以节省磁盘空间" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\FsDepends\Parameters" checkValue="VirtualDiskExpandOnMount" optimizedValue="4">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\FsDepends\Parameters" Value="VirtualDiskExpandOnMount" Type="REG_DWORD" Data="4"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\FsDepends\Parameters" Value="VirtualDiskExpandOnMount" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="4、蓝屏时自动重启" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CrashControl" checkValue="AutoReboot" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CrashControl" Value="AutoReboot" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CrashControl" Value="AutoReboot" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="5、关闭系统自动调试功能" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug" checkValue="Auto" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug" Value="Auto" Type="REG_SZ" Data="0" Wow64="True"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHine\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug" Value="Auto" Type="REG_SZ" Data="1" Wow64="True"/>
+      </Restore>
+    </Item>
+
+<Item name="6、将磁盘错误检查的等待时间缩短到五秒" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager" checkValue="AutoChkTimeOut" optimizedValue="5">
+  <Optimize>
+    <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager" Value="AutoChkTimeOut" Type="REG_DWORD" Data="5"/>
+  </Optimize>
+  <Restore>
+    <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager" Value="AutoChkTimeOut" Type="REG_DWORD" Data="a"/>
+  </Restore>
+</Item>
+
+    <Item name="7、设备安装禁止创建系统还原点" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Settings" checkValue="DisableSystemRestore" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Settings" Value="DisableSystemRestore" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Settings" Value="DisableSystemRestore"/>
+      </Restore>
+    </Item>
+
+    <Item name="8、MSI类软件安装禁止创建系统还原点" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Installer" checkValue="LimitSystemRestoreCheckpointing" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Installer" Value="LimitSystemRestoreCheckpointing" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Installer" Value="LimitSystemRestoreCheckpointing"/>
+      </Restore>
+    </Item>
+
+    <Item name="9、关闭系统还原" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" checkValue="DisableSR" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" Value="DisableSR" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore\Setup\Generalize" Value="DisableSR" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore\Setup_Last" Value="Generalize_DisableSR" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore\cfg" Value="DiskPercent" Type="REG_DWORD" Data="5"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" Value="DisableSR" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore\Setup\Generalize" Value="DisableSR" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore\Setup_Last" Value="Generalize_DisableSR" Type="REG_DWORD" Data="0"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore\cfg" Value="DiskPercent" Type="REG_DWORD" Data="5"/>
+      </Restore>
+    </Item>
+
+    <Item name="10、根据语言设置隐藏字体" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows NT\CurrentVersion\Font Management" checkValue="Auto Activation Mode" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows NT\CurrentVersion\Font Management" Value="Auto Activation Mode" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows NT\CurrentVersion\Font Management" Value="Auto Activation Mode" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="11、允许字体作为快捷方式安装" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows NT\CurrentVersion\Font Management" checkValue="InstallAsLink" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows NT\CurrentVersion\Font Management" Value="InstallAsLink" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows NT\CurrentVersion\Font Management" Value="InstallAsLink" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="12、崩溃时不写入调试信息" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CrashControl" checkValue="CrashDumpEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CrashControl" Value="CrashDumpEnabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CrashControl" Value="CrashDumpEnabled" Type="REG_DWORD" Data="7"/>
+      </Restore>
+    </Item>
+
+    <Item name="13、禁用账户登录日志报告" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" checkValue="ReportBootOk" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" Value="ReportBootOk" Type="REG_SZ" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" Value="ReportBootOk" Type="REG_SZ" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="14、禁用WfpDiag.ETL日志" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\BFE\Parameters\Policy\Options" checkValue="CollectNetEvents" optimizedValue="0">
+      <Optimize>
+        <ExplorerNotify Type="Cmd" Cmd="NETSH WFP SET OPTIONS NETEVENTS=OFF"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\BFE\Parameters\Policy\Options" Value="CollectNetEvents" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <ExplorerNotify Type="Cmd" Cmd="NETSH WFP SET OPTIONS NETEVENTS=ON"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\BFE\Parameters\Policy\Options" Value="CollectNetEvents"/>
+      </Restore>
+    </Item>
+</Configuration>
+
+  <!-- 更新设置 -->
+  <Configuration category="update">
+    <Item name="1、自动安装无需重启的更新" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" checkValue="AutoInstallMinorUpdates" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" Value="AutoInstallMinorUpdates" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" Value="AutoInstallMinorUpdates" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="2、更新挂起时若有用户登录则不自动重启计算机" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" checkValue="NoAutoRebootWithLoggedOnUsers" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" Value="NoAutoRebootWithLoggedOnUsers" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" Value="NoAutoRebootWithLoggedOnUsers" Type="REG_DWORD" Data="0"/>
+      </Restore>
+    </Item>
+
+    <Item name="3、Windows更新不包括驱动程序" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" checkValue="ExcludeWUDriversInQualityUpdate" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" Value="ExcludeWUDriversInQualityUpdate" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" Value="ExcludeWUDriversInQualityUpdate"/>
+      </Restore>
+    </Item>
+
+    <Item name="4、禁止Win10/11进行大版本更新" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control" checkValue="PortableOperatingSystem" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control" Value="PortableOperatingSystem" Type="REG_DWORD" Data="1"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" Value="TargetReleaseVersion" SkipError="2"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" Value="TargetReleaseVersionInfo" SkipError="2"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" Value="ProductVersion" SkipError="2"/>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" Value="DisableOSUpgrade" SkipError="2"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control" Value="PortableOperatingSystem"/>
+      </Restore>
+    </Item>
+
+    <Item name="5、Windows更新不包括恶意软件删除工具" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\MRT" checkValue="DontOfferThroughWUAU" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\MRT" Value="DontOfferThroughWUAU" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\MRT" Value="DontOfferThroughWUAU"/>
+      </Restore>
+    </Item>
+
+    <Item name="6、从不检查系统更新" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update" checkValue="AUOptions" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update" Value="AUOptions" Type="REG_DWORD" Data="1"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update" Value="CachedAUOptions" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update" Value="AUOptions" Type="REG_DWORD" Data="4"/>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update" Value="CachedAUOptions" Type="REG_DWORD" Data="4"/>
+      </Restore>
+    </Item>
+
+    <Item name="7、不要显示“新版本记事本已可用”提示" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Notepad" checkValue="ShowStoreBanner" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Notepad" Value="ShowStoreBanner" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Notepad" Value="ShowStoreBanner"/>
+      </Restore>
+    </Item>
+
+</Configuration>
+
+  <!-- 隐私设置 -->
+  <Configuration category="yinsi">
+    <Item name="1、禁用页面预测功能" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer" checkValue="AllowPagePrediction" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer" Value="AllowPagePrediction" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer" Value="AllowPagePrediction"/>
+      </Restore>
+    </Item>
+
+<Item name="2、禁用SMS路由器服务" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\SmsRouter" checkValue="Start" optimizedValue="4">
+  <Optimize>
+    <SetServiceStart Name="SmsRouter" Type="4"/>
+    <ExplorerNotify Type="Cmd" Cmd="net stop SmsRouter" SkipError="2"/>
+  </Optimize>
+  <Restore>
+    <SetServiceStart Name="SmsRouter" Type="3"/>
+  </Restore>
+</Item>
+
+    <Item name="3、禁用活动收集" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Privacy" checkValue="TailoredExperiencesWithDiagnosticDataEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Privacy" Value="TailoredExperiencesWithDiagnosticDataEnabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Privacy" Value="TailoredExperiencesWithDiagnosticDataEnabled"/>
+      </Restore>
+    </Item>
+
+    <Item name="4、禁用应用启动跟踪" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" checkValue="Start_TrackProgs" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="Start_TrackProgs" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Value="Start_TrackProgs" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="5、禁用广告标识符" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo" checkValue="Enabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo" Value="Enabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo" Value="Enabled" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="6、禁用应用访问文件系统" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\broadFileSystemAccess" checkValue="Value" optimizedValue="Deny">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\broadFileSystemAccess" Value="Value" Type="REG_SZ" Data="Deny"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\broadFileSystemAccess" Value="Value"/>
+      </Restore>
+    </Item>
+
+    <Item name="7、禁用应用访问文档" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\documentsLibrary" checkValue="Value" optimizedValue="Deny">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\documentsLibrary" Value="Value" Type="REG_SZ" Data="Deny"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\documentsLibrary" Value="Value"/>
+      </Restore>
+    </Item>
+
+    <Item name="8、禁用应用访问日历" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\appointments" checkValue="Value" optimizedValue="Deny">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\appointments" Value="Value" Type="REG_SZ" Data="Deny"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\appointments" Value="Value"/>
+      </Restore>
+    </Item>
+
+    <Item name="9、禁用应用访问联系人" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\contacts" checkValue="Value" optimizedValue="Deny">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore" Value="Value" Type="REG_SZ" Data="Deny"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore" Value="Value"/>
+      </Restore>
+    </Item>
+
+    <Item name="10、禁用网站语言跟踪" checkKey="HKEY_CURRENT_USER\Control Panel\International\User Profile" checkValue="HttpAcceptLanguageOptOut" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Control Panel\International\User Profile" Value="HttpAcceptLanguageOptOut" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Control Panel\International\User Profile" Value="HttpAcceptLanguageOptOut"/>
+      </Restore>
+    </Item>
+
+    <Item name="11、禁用Windows欢迎体验" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" checkValue="DisableFirstRunAnimate" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="DisableFirstRunAnimate" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" Value="DisableFirstRunAnimate"/>
+      </Restore>
+    </Item>
+
+    <Item name="12、禁用反馈频率" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection" checkValue="DoNotShowFeedbackNotifications" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection" Value="DoNotShowFeedbackNotifications" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection" Value="DoNotShowFeedbackNotifications"/>
+      </Restore>
+    </Item>
+
+    <Item name="13、禁用诊断数据收集" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection" checkValue="AllowTelemetry" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection" Value="AllowTelemetry" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection" Value="AllowTelemetry"/>
+      </Restore>
+    </Item>
+
+    <Item name="14、禁用写作习惯跟踪" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Input\Settings" checkValue="Inking&amp;TypingPersonalization" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Input\Settings" Value="Inking&amp;TypingPersonalization" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Input\Settings" Value="Inking&amp;TypingPersonalization"/>
+      </Restore>
+    </Item>
+
+    <Item name="15、禁用设置应用建议" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" checkValue="SubscribedContent-338393Enabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="SubscribedContent-338393Enabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" Value="SubscribedContent-338393Enabled"/>
+      </Restore>
+    </Item>
+
+    <Item name="16、禁用Bing搜索结果" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Search" checkValue="BingSearchEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Search" Value="BingSearchEnabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Search" Value="BingSearchEnabled"/>
+      </Restore>
+    </Item>
+
+    <Item name="17、禁用通讯录收集" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\contacts" checkValue="Value" optimizedValue="Deny">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\contacts" Value="Value" Type="REG_SZ" Data="Deny"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\contacts" Value="Value"/>
+      </Restore>
+    </Item>
+
+    <Item name="18、禁用键入文本收集" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Input\Settings" checkValue="Inking&amp;TypingPersonalization" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Input\Settings" Value="Inking&amp;TypingPersonalization" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Input\Settings" Value="Inking&amp;TypingPersonalization"/>
+      </Restore>
+    </Item>
+
+    <Item name="19、禁用搜索历史" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\SearchSettings" checkValue="IsDeviceSearchHistoryEnabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\SearchSettings" Value="IsDeviceSearchHistoryEnabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\SearchSettings" Value="IsDeviceSearchHistoryEnabled"/>
+      </Restore>
+    </Item>
+
+    <Item name="20、禁用赞助商应用安装" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\CloudContent" checkValue="DisableThirdPartySuggestions" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\CloudContent" Value="DisableThirdPartySuggestions" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\CloudContent" Value="DisableThirdPartySuggestions"/>
+      </Restore>
+    </Item>
+
+    <Item name="21、禁用自动连接热点" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\Local" checkValue="fBlockNonDomain" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\Local" Value="fBlockNonDomain" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\Local" Value="fBlockNonDomain"/>
+      </Restore>
+    </Item>
+
+    <Item name="22、禁用输入数据个性化" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Personalization\Settings" checkValue="RestrictImplicitTextCollection" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Personalization\Settings" Value="RestrictImplicitTextCollection" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Personalization\Settings" Value="RestrictImplicitTextCollection"/>
+      </Restore>
+    </Item>
+
+    <Item name="23、禁用键入见解" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Input\Settings" checkValue="EnableTypingInsights" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Input\Settings" Value="EnableTypingInsights" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Microsoft\Input\Settings" Value="EnableTypingInsights"/>
+      </Restore>
+    </Item>
+
+    <Item name="24、禁用预安装应用" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" checkValue="DisablePreInstalledApps" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" Value="DisablePreInstalledApps" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" Value="DisablePreInstalledApps"/>
+      </Restore>
+    </Item>
+
+    <Item name="25、禁用.NET遥测" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection" checkValue="DisableNetFrameworkTelemetry" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection" Value="DisableNetFrameworkTelemetry" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection" Value="DisableNetFrameworkTelemetry"/>
+      </Restore>
+    </Item>
+
+    <Item name="26、禁用PowerShell遥测" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\PowerShell" checkValue="EnablePowerShellTelemetry" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\PowerShell" Value="EnablePowerShellTelemetry" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\PowerShell" Value="EnablePowerShellTelemetry"/>
+      </Restore>
+    </Item>
+
+    <Item name="27、禁用遥测服务" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\DiagTrack" checkValue="Start" optimizedValue="4">
+      <Optimize>
+        <SetServiceStart Name="DiagTrack" Type="4"/>
+      </Optimize>
+      <Restore>
+        <SetServiceStart Name="DiagTrack" Type="2"/>
+      </Restore>
+    </Item>
+
+    <Item name="28、禁用语音激活(Cortana)" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy" checkValue="LetAppsActivateWithVoice" optimizedValue="2">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy" Value="LetAppsActivateWithVoice" Type="REG_DWORD" Data="2"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy" Value="LetAppsActivateWithVoice"/>
+      </Restore>
+    </Item>
+
+    <Item name="29、禁用位置服务" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors" checkValue="DisableLocation" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors" Value="DisableLocation" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors" Value="DisableLocation"/>
+      </Restore>
+    </Item>
+
+<Item name="30、启用剪切板历史记录" checkKey="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Clipboard" checkValue="EnableClipboardHistory" optimizedValue="1">
+  <Optimize>
+    <RegWrite Type="DWORD" Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Clipboard" Value="EnableClipboardHistory" Data="1"/>
+  </Optimize>
+  <Restore>
+    <RegWrite Type="DWORD" Key="HKEY_CURRENT_USER\SOFTWARE\Microsoft\Clipboard" Value="EnableClipboardHistory" Data="0"/>
+  </Restore>
+</Item>
+
+    <Item name="31、禁用定向广告" checkKey="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo" checkValue="Enabled" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo" Value="Enabled" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo" Value="Enabled" Type="REG_DWORD" Data="1"/>
+      </Restore>
+    </Item>
+
+    <Item name="32、禁用Wi-Fi感知" checkKey="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\Local" checkValue="fBlockNonDomain" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\Local" Value="fBlockNonDomain" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\Local" Value="fBlockNonDomain"/>
+      </Restore>
+    </Item>
+
+    <Item name="33、禁用步骤记录器" checkKey="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\ProblemReports" checkValue="DisableProblemReports" optimizedValue="1">
+      <Optimize>
+        <RegWrite Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\ProblemReports" Value="DisableProblemReports" Type="REG_DWORD" Data="1"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_CURRENT_USER\Software\Policies\Microsoft\Windows\ProblemReports" Value="DisableProblemReports"/>
+      </Restore>
+    </Item>
+
+    <Item name="34、禁用写入调试信息" checkKey="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Debug Print Filter" checkValue="DEFAULT" optimizedValue="0">
+      <Optimize>
+        <RegWrite Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Debug Print Filter" Value="DEFAULT" Type="REG_DWORD" Data="0"/>
+      </Optimize>
+      <Restore>
+        <RegDelete Key="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Debug Print Filter" Value="DEFAULT"/>
+      </Restore>
+    </Item>
+</Configuration>
+
+</ZyperConfigurations>

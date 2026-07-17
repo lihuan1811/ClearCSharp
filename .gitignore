@@ -1,0 +1,30 @@
+.vs/
+bin/
+obj/
+!ZyperWin++/Bin/
+!ZyperWin++/Bin/ZyperData.xml
+packages/*/tools/
+packages/AntdUI.2.1.3/lib/net40/
+packages/AntdUI.2.1.3/lib/net46/
+TestResults/
+*.user
+*.suo
+*.nupkg
+artifacts/
+
+# Unused upstream pages are preserved in the sibling source clone, but are not
+# part of the C DiskGlow product defined by the current requirements.
+ZyperWin++/About.*
+ZyperWin++/Activate.*
+ZyperWin++/Appx.*
+ZyperWin++/Backup.*
+ZyperWin++/Clean.*
+ZyperWin++/Defender.*
+ZyperWin++/Edge.*
+ZyperWin++/MainMenu.*
+ZyperWin++/MainWindow.Designer.cs
+ZyperWin++/MainWindow.resx
+ZyperWin++/Office.*
+ZyperWin++/Others.*
+ZyperWin++/question.*
+ZyperWin++/Resources/68747470733a2f2f6d61737367726176652e6465762f696d672f6c6f676f5f736d616c6c2e706e67.png

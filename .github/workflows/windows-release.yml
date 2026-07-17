@@ -1,0 +1,71 @@
+name: Windows .NET Framework release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-release:
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build Release
+        shell: pwsh
+        run: msbuild ZyperWin++.sln /m /t:Rebuild /p:Configuration=Release /p:Platform="Any CPU" /v:minimal
+
+      - name: Run regression tests
+        shell: pwsh
+        run: .\CDriveCleaner.Tests\bin\Release\CDriveCleaner.Tests.exe
+
+      - name: Validate single-file executable
+        shell: pwsh
+        run: |
+          $exe = Get-Item '.\ZyperWin++\bin\Release\C DiskGlow.exe'
+          if ($exe.Length -lt 2500000) {
+            throw "Executable is too small; embedded AntdUI dependency is likely missing."
+          }
+          & mt.exe -nologo "-inputresource:$($exe.FullName);#1" -out:embedded.manifest
+          $manifest = Get-Content embedded.manifest -Raw
+          if ($manifest -notmatch 'requireAdministrator') {
+            throw "Administrator manifest was not embedded."
+          }
+          Write-Host "Validated $($exe.Name), $($exe.Length) bytes"
+
+      - name: Package artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Copy-Item '.\ZyperWin++\bin\Release\C DiskGlow.exe' '.\artifacts\C-DiskGlow-net48.exe'
+          Compress-Archive -Path '.\ZyperWin++\bin\Release\*' -DestinationPath '.\artifacts\C-DiskGlow-net48-portable.zip'
+          Get-FileHash '.\artifacts\C-DiskGlow-net48.exe' -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  C-DiskGlow-net48.exe" } |
+            Set-Content '.\artifacts\SHA256SUMS.txt' -Encoding ascii
+          Get-FileHash '.\artifacts\C-DiskGlow-net48-portable.zip' -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  C-DiskGlow-net48-portable.zip" } |
+            Add-Content '.\artifacts\SHA256SUMS.txt' -Encoding ascii
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: C-DiskGlow-net48-${{ github.run_number }}
+          path: artifacts/*
+
+      - name: Publish GitHub release
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "csharp-build-${{ github.run_number }}"
+          gh release create $tag artifacts/* --title "C DiskGlow .NET 4.8 build ${{ github.run_number }}" --notes "Windows .NET Framework 4.8 build. Includes a dependency-free single EXE and a portable ZIP."
