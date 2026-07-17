@@ -52,6 +52,7 @@
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BackupStore.cs" />
     <Compile Include="CleanupDashboard.cs" />
     <Compile Include="CleanupService.cs" />
     <Compile Include="DiskAnalysisService.cs" />
@@ -71,6 +72,8 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="RepairDashboard.cs" />
+    <Compile Include="RestoreDialog.cs" />
+    <Compile Include="SystemOptimizationDashboard.cs" />
     <Compile Include="UiFactory.cs" />
     <Compile Include="UninstallDashboard.cs" />
     <Compile Include="UninstallService.cs" />

@@ -16,10 +16,9 @@ namespace ZyperWin__
         private readonly ProgressBar progress = new ProgressBar();
         private readonly Button scanButton = UiFactory.PrimaryButton("扫描");
         private readonly Button cleanButton = UiFactory.SecondaryButton("清理选中");
-        private readonly Button selectRecommendedButton = UiFactory.SecondaryButton("推荐项");
-        private readonly Dictionary<CleanupKind, Button> kindButtons = new Dictionary<CleanupKind, Button>();
+        private readonly Button selectRecommendedButton = UiFactory.SecondaryButton("默认");
+        private readonly Button selectNoneButton = UiFactory.SecondaryButton("全不选");
         private CancellationTokenSource cancellation;
-        private CleanupKind currentKind = CleanupKind.DriveC;
 
         public CleanupDashboard()
         {
@@ -29,19 +28,13 @@ namespace ZyperWin__
 
             FlowLayoutPanel headerActions;
             Panel header = UiFactory.Header(
-                "C 盘清理",
-                "先扫描再清理，QQ 与微信只处理缓存、临时文件和日志。",
+                "C 盘深度清理",
+                "按过期文件、系统相关、缓存、应用和临时文件细分；高风险目录只分析。",
                 out headerActions);
-
-            foreach (CleanupKind kind in Enum.GetValues(typeof(CleanupKind)))
-            {
-                var button = UiFactory.SecondaryButton(KindName(kind));
-                button.Width = 94;
-                CleanupKind captured = kind;
-                button.Click += delegate { SwitchKind(captured); };
-                kindButtons[kind] = button;
-                headerActions.Controls.Add(button);
-            }
+            selectNoneButton.Width = 82;
+            selectRecommendedButton.Width = 82;
+            headerActions.Controls.Add(selectNoneButton);
+            headerActions.Controls.Add(selectRecommendedButton);
 
             ConfigureGrid();
 
@@ -72,10 +65,8 @@ namespace ZyperWin__
                 WrapContents = false,
                 Dock = DockStyle.Fill
             };
-            selectRecommendedButton.Width = 92;
             scanButton.Width = 90;
             cleanButton.Width = 104;
-            actions.Controls.Add(selectRecommendedButton);
             actions.Controls.Add(scanButton);
             actions.Controls.Add(cleanButton);
             bottom.Controls.Add(actions, 1, 1);
@@ -87,7 +78,8 @@ namespace ZyperWin__
             scanButton.Click += async delegate { await ScanAsync(); };
             cleanButton.Click += async delegate { await CleanAsync(); };
             selectRecommendedButton.Click += delegate { SelectRecommended(); };
-            SwitchKind(CleanupKind.DriveC);
+            selectNoneButton.Click += delegate { SelectNone(); };
+            PopulateRules();
         }
 
         private void ConfigureGrid()
@@ -103,9 +95,16 @@ namespace ZyperWin__
             });
             grid.Columns.Add(new DataGridViewTextBoxColumn
             {
+                Name = "Category",
+                HeaderText = "分类",
+                Width = 92,
+                ReadOnly = true
+            });
+            grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
                 Name = "Name",
                 HeaderText = "清理项",
-                Width = 165,
+                Width = 190,
                 ReadOnly = true
             });
             grid.Columns.Add(new DataGridViewTextBoxColumn
@@ -114,6 +113,13 @@ namespace ZyperWin__
                 HeaderText = "说明",
                 AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
                 MinimumWidth = 220,
+                ReadOnly = true
+            });
+            grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "Risk",
+                HeaderText = "风险",
+                Width = 76,
                 ReadOnly = true
             });
             grid.Columns.Add(new DataGridViewTextBoxColumn
@@ -134,39 +140,33 @@ namespace ZyperWin__
             {
                 Name = "Path",
                 HeaderText = "扫描位置",
-                Width = 260,
+                Width = 230,
                 ReadOnly = true
             });
-        }
-
-        private void SwitchKind(CleanupKind kind)
-        {
-            if (cancellation != null) cancellation.Cancel();
-            currentKind = kind;
-            foreach (KeyValuePair<CleanupKind, Button> pair in kindButtons)
-            {
-                bool active = pair.Key == kind;
-                pair.Value.BackColor = active ? AppPalette.Green : Color.White;
-                pair.Value.ForeColor = active ? Color.White : AppPalette.Green;
-            }
-            PopulateRules();
-            status.Text = "准备扫描" + KindName(kind) + "路径。";
         }
 
         private void PopulateRules()
         {
             grid.Rows.Clear();
-            foreach (CleanupRule rule in CleanupCatalog.GetRules(currentKind))
+            foreach (CleanupRule rule in CleanupCatalog.GetRules(CleanupKind.DriveC))
             {
                 int index = grid.Rows.Add(
-                    rule.Recommended,
+                    rule.Recommended && !rule.ScanOnly,
+                    rule.Category,
                     rule.Name,
                     rule.Description,
+                    rule.Risk,
                     "待扫描",
                     "--",
                     string.Join("；", rule.PathTemplates.Select(Environment.ExpandEnvironmentVariables)));
                 grid.Rows[index].Tag = rule;
+                if (rule.ScanOnly)
+                {
+                    grid.Rows[index].Cells["Selected"].ReadOnly = true;
+                    grid.Rows[index].DefaultCellStyle.ForeColor = AppPalette.Muted;
+                }
             }
+            status.Text = "已加载 " + grid.Rows.Count + " 条清理规则，勾选后点击扫描。";
         }
 
         private async Task ScanAsync()
@@ -183,23 +183,30 @@ namespace ZyperWin__
             try
             {
                 var reporter = new Progress<string>(value => status.Text = value);
-                IList<CleanupScanResult> results = await service.ScanAsync(currentKind, reporter, cancellation.Token);
+                IList<CleanupScanResult> results = await service.ScanAsync(CleanupKind.DriveC, reporter, cancellation.Token);
                 grid.Rows.Clear();
                 foreach (CleanupScanResult result in results)
                 {
                     int index = grid.Rows.Add(
-                        result.Rule.Recommended,
+                        result.Rule.Recommended && !result.Rule.ScanOnly,
+                        result.Rule.Category,
                         result.Rule.Name,
                         result.Rule.Description,
+                        result.Rule.Risk,
                         DisplayFormat.Bytes(result.Bytes),
                         result.FileCount.ToString("N0"),
                         result.Roots.Count == 0 ? "未找到" : string.Join("；", result.Roots));
                     grid.Rows[index].Tag = result;
+                    if (result.Rule.ScanOnly)
+                    {
+                        grid.Rows[index].Cells["Selected"].ReadOnly = true;
+                        grid.Rows[index].DefaultCellStyle.ForeColor = AppPalette.Muted;
+                    }
                 }
                 long total = results.Sum(value => value.Bytes);
                 int files = results.Sum(value => value.FileCount);
                 status.Text = string.Format("扫描完成：{0:N0} 个文件，可释放 {1}。", files, DisplayFormat.Bytes(total));
-                OperationLogger.Info("清理扫描", KindName(currentKind) + "，可释放 " + DisplayFormat.Bytes(total));
+                OperationLogger.Info("清理扫描", "C 盘深度清理，可释放 " + DisplayFormat.Bytes(total));
             }
             catch (OperationCanceledException)
             {
@@ -239,7 +246,7 @@ namespace ZyperWin__
             long bytes = selected.Sum(value => value.Bytes);
             int files = selected.Sum(value => value.FileCount);
             DialogResult answer = MessageBox.Show(
-                string.Format("将永久删除 {0:N0} 个缓存/临时文件，预计释放 {1}。\n\n清理删除不可还原，是否继续？", files, DisplayFormat.Bytes(bytes)),
+                string.Format("将删除 {0:N0} 个已扫描文件，预计释放 {1}。\n\n默认会先写入清理备份；仅分析项不会删除。是否继续？", files, DisplayFormat.Bytes(bytes)),
                 "确认清理",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
@@ -308,18 +315,22 @@ namespace ZyperWin__
             scanButton.Text = scanText;
             cleanButton.Enabled = !busy;
             selectRecommendedButton.Enabled = !busy;
+            selectNoneButton.Enabled = !busy;
             grid.Enabled = !busy;
-            foreach (Button button in kindButtons.Values) button.Enabled = !busy;
         }
 
-        private static string KindName(CleanupKind kind)
+        private void SelectNone()
         {
-            switch (kind)
+            foreach (DataGridViewRow row in grid.Rows)
             {
-                case CleanupKind.QQ: return "QQ 专清";
-                case CleanupKind.WeChat: return "微信专清";
-                default: return "C 盘清理";
+                row.Cells["Selected"].Value = false;
             }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && cancellation != null) cancellation.Cancel();
+            base.Dispose(disposing);
         }
     }
 }

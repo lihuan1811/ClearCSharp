@@ -11,6 +11,7 @@ namespace ZyperWin__
         private readonly Panel navigation = new Panel();
         private readonly FlowLayoutPanel navigationButtons = new FlowLayoutPanel();
         private readonly Panel content = new Panel();
+        private readonly Panel bottomBar = new Panel();
         private readonly Label shellStatus = new Label();
         private readonly Dictionary<string, Button> buttons = new Dictionary<string, Button>();
         private string activeModule;
@@ -33,11 +34,11 @@ namespace ZyperWin__
             BuildStatusBar();
 
             Controls.Add(content);
-            Controls.Add(shellStatus);
+            Controls.Add(bottomBar);
             Controls.Add(navigation);
             Controls.Add(titleBar);
 
-            Shown += delegate { Navigate("C 盘清理"); };
+            Shown += delegate { Navigate("C 盘深度清理"); };
         }
 
         public void SetMenuEnabled(bool enabled)
@@ -100,13 +101,11 @@ namespace ZyperWin__
             navigationButtons.WrapContents = false;
             navigationButtons.Padding = new Padding(4, 8, 0, 6);
 
-            AddNavigationButton("C 盘清理");
-            AddNavigationButton("系统优化");
-            AddNavigationButton("软件卸载");
-            AddNavigationButton("文件管理");
-            AddNavigationButton("显卡优化");
-            AddNavigationButton("系统修复");
-            AddNavigationButton("操作日志");
+            AddNavigationButton("C 盘深度清理");
+            AddNavigationButton("软件强力卸载");
+            AddNavigationButton("系统智能优化");
+            AddNavigationButton("磁盘文件管理器");
+            AddNavigationButton("CMD 系统修复");
 
             navigation.Controls.Add(navigationButtons);
             navigation.Controls.Add(brand);
@@ -114,7 +113,11 @@ namespace ZyperWin__
 
         private void BuildStatusBar()
         {
-            shellStatus.Dock = DockStyle.Bottom;
+            bottomBar.Dock = DockStyle.Bottom;
+            bottomBar.Height = 34;
+            bottomBar.BackColor = Color.White;
+            bottomBar.Padding = new Padding(8, 3, 8, 3);
+            shellStatus.Dock = DockStyle.Fill;
             shellStatus.Height = 26;
             shellStatus.BackColor = Color.White;
             shellStatus.ForeColor = AppPalette.Muted;
@@ -122,6 +125,26 @@ namespace ZyperWin__
             shellStatus.Padding = new Padding(14, 0, 0, 0);
             shellStatus.Font = new Font("Microsoft YaHei UI", 8.5F);
             shellStatus.Text = "管理员权限已启用";
+            var actions = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Right,
+                AutoSize = true,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Margin = new Padding(0)
+            };
+            Button logs = UiFactory.SecondaryButton("操作日志");
+            Button restore = UiFactory.SecondaryButton("全局一键还原");
+            logs.Height = 27;
+            logs.Width = 86;
+            restore.Height = 27;
+            restore.Width = 112;
+            logs.Click += delegate { using (var dialog = new Form { Text = "全部操作日志", ClientSize = new Size(900, 560), StartPosition = FormStartPosition.CenterParent }) { dialog.Controls.Add(new LogDashboard { Dock = DockStyle.Fill }); dialog.ShowDialog(this); } };
+            restore.Click += delegate { using (var dialog = new RestoreDialog()) dialog.ShowDialog(this); };
+            actions.Controls.Add(logs);
+            actions.Controls.Add(restore);
+            bottomBar.Controls.Add(shellStatus);
+            bottomBar.Controls.Add(actions);
         }
 
         private void AddNavigationButton(string module)
@@ -129,7 +152,7 @@ namespace ZyperWin__
             var button = new Button
             {
                 Text = module,
-                Width = 122,
+                Width = 174,
                 Height = 42,
                 Margin = new Padding(0, 0, 2, 0),
                 FlatStyle = FlatStyle.Flat,
@@ -167,23 +190,17 @@ namespace ZyperWin__
                 Control control;
                 switch (module)
                 {
-                    case "系统优化":
-                        control = new Optimize();
+                    case "系统智能优化":
+                        control = new SystemOptimizationDashboard();
                         break;
-                    case "软件卸载":
+                    case "软件强力卸载":
                         control = new UninstallDashboard();
                         break;
-                    case "文件管理":
+                    case "磁盘文件管理器":
                         control = new FileManagerDashboard();
                         break;
-                    case "显卡优化":
-                        control = new GpuDashboard();
-                        break;
-                    case "系统修复":
+                    case "CMD 系统修复":
                         control = new RepairDashboard();
-                        break;
-                    case "操作日志":
-                        control = new LogDashboard();
                         break;
                     default:
                         control = new CleanupDashboard();
@@ -195,7 +212,6 @@ namespace ZyperWin__
                 content.Controls.Clear();
                 content.Controls.Add(control);
                 content.ResumeLayout(true);
-                if (control is Optimize) UiFactory.ApplyTheme(control);
                 shellStatus.Text = "当前模块：" + module;
             }
             catch (Exception ex)

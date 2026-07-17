@@ -9,19 +9,21 @@ namespace ZyperWin__
 {
     public enum CleanupKind
     {
-        DriveC,
-        QQ,
-        WeChat
+        DriveC
     }
 
     public sealed class CleanupRule
     {
         public string Id { get; set; }
         public string Name { get; set; }
+        public string Category { get; set; }
         public string Description { get; set; }
-        public string SearchPattern { get; set; }
+        public string Risk { get; set; }
+        public List<string> SearchPatterns { get; set; }
         public bool Recursive { get; set; }
         public bool Recommended { get; set; }
+        public bool ScanOnly { get; set; }
+        public int MinimumAgeDays { get; set; }
         public List<string> PathTemplates { get; set; }
     }
 
@@ -39,110 +41,113 @@ namespace ZyperWin__
         public long Bytes { get; set; }
         public int DeletedFiles { get; set; }
         public int FailedFiles { get; set; }
+        public int SkippedFiles { get; set; }
     }
 
     public static class CleanupCatalog
     {
         public static IList<CleanupRule> GetRules(CleanupKind kind)
         {
-            switch (kind)
-            {
-                case CleanupKind.QQ:
-                    return QQRules();
-                case CleanupKind.WeChat:
-                    return WeChatRules();
-                default:
-                    return DriveRules();
-            }
+            return DriveRules();
         }
 
         private static IList<CleanupRule> DriveRules()
         {
             return new List<CleanupRule>
             {
-                Rule("user-temp", "用户临时文件", "当前用户 TEMP 目录中的临时文件", true,
-                    "%TEMP%"),
-                Rule("windows-temp", "Windows 临时文件", "Windows Temp 目录中可安全释放的文件", true,
-                    "%WINDIR%\\Temp"),
-                Rule("wer", "Windows 错误报告", "已归档和待上报的错误报告", true,
-                    "%ProgramData%\\Microsoft\\Windows\\WER\\ReportArchive",
-                    "%ProgramData%\\Microsoft\\Windows\\WER\\ReportQueue"),
-                PatternRule("crash-dumps", "应用崩溃转储", "应用生成的 .dmp 崩溃文件", true, "*.dmp",
+                Rule("过期文件", "winsxs-backup", "WinSxS 备份组件（仅分析）", "组件存储必须由 DISM/CBS 维护，本工具不会直接删除。", "高风险", false, true, 0, null,
+                    "%WINDIR%\\WinSxS\\Backup"),
+                Rule("过期文件", "old-windows", "旧 Windows 安装文件（仅分析）", "用于版本回退的系统升级残留，只统计空间。", "高风险", false, true, 0, null,
+                    "%SystemDrive%\\Windows.old", "%SystemDrive%\\$Windows.~BT", "%SystemDrive%\\$Windows.~WS"),
+                Rule("过期文件", "service-pack", "旧服务包卸载备份", "旧版 Windows 服务包留下的卸载备份。", "谨慎", false, false, 0, null,
+                    "%WINDIR%\\$NtServicePackUninstall$", "%WINDIR%\\$hf_mig$"),
+                Rule("过期文件", "windows-update", "Windows 更新下载缓存", "已下载的更新包与临时文件，正在安装更新时不应清理。", "谨慎", false, false, 0, null,
+                    "%WINDIR%\\SoftwareDistribution\\Download", "%WINDIR%\\SoftwareDistribution\\Temp"),
+                Rule("过期文件", "delivery-optimization", "Windows 传递优化缓存", "Windows 更新分发时保存的可再生下载缓存。", "安全", true, false, 0, null,
+                    "%WINDIR%\\ServiceProfiles\\NetworkService\\AppData\\Local\\Microsoft\\Windows\\DeliveryOptimization\\Cache",
+                    "%WINDIR%\\SoftwareDistribution\\DeliveryOptimization\\Cache"),
+                Rule("过期文件", "backup-temp", "30 天前的备份临时文件", "Windows Backup 产生的旧日志和临时文件。", "安全", true, false, 30, null,
+                    "%WINDIR%\\Temp\\WindowsBackup", "%WINDIR%\\Logs\\WindowsBackup", "%LOCALAPPDATA%\\Microsoft\\Windows\\WindowsBackup"),
+                Rule("过期文件", "installer-cache", "30 天前的安装程序缓存", "仅匹配安装缓存中的临时、日志和旧文件，不删除有效 MSI/MSP。", "谨慎", false, false, 30,
+                    new[] { "*.tmp", "*.temp", "*.log", "*.old", "*.msi.cache", "*.msp.cache", "*.exe.cache" },
+                    "%WINDIR%\\Installer\\Temp", "%ProgramData%\\Package Cache\\Temp", "%LOCALAPPDATA%\\Package Cache"),
+
+                Rule("系统相关", "error-reports", "Windows 错误报告", "系统和应用崩溃后生成的 WER 报告。", "安全", true, false, 0, null,
+                    "%ProgramData%\\Microsoft\\Windows\\WER", "%LOCALAPPDATA%\\Microsoft\\Windows\\WER"),
+                Rule("系统相关", "event-logs", "Windows 事件日志（仅分析）", "事件日志用于系统审计和故障排查，只统计不删除。", "高风险", false, true, 0, new[] { "*.evtx" },
+                    "%WINDIR%\\System32\\winevt\\Logs"),
+                Rule("系统相关", "setup-logs", "Windows 安装与设备日志", "系统安装、升级和设备安装留下的日志。", "安全", true, false, 0, new[] { "*.log", "*.etl", "*.tmp" },
+                    "%WINDIR%\\Panther", "%WINDIR%\\INF", "%WINDIR%\\System32\\LogFiles\\setupapi"),
+                Rule("系统相关", "system-logs", "Windows 系统日志", "Windows Logs 与 debug 目录中的旧日志和跟踪文件。", "安全", true, false, 0, new[] { "*.log", "*.etl", "*.tmp", "*.dmp" },
+                    "%WINDIR%\\Logs", "%WINDIR%\\debug"),
+                Rule("系统相关", "memory-dumps", "系统内存转储文件", "蓝屏和系统故障生成的内存转储。", "安全", true, false, 0, new[] { "*.dmp", "MEMORY.DMP" },
+                    "%WINDIR%\\Minidump", "%WINDIR%\\MEMORY.DMP"),
+                Rule("系统相关", "app-crash", "应用程序崩溃转储", "应用崩溃后写入当前用户 CrashDumps 的转储文件。", "安全", true, false, 0, new[] { "*.dmp" },
                     "%LOCALAPPDATA%\\CrashDumps"),
-                Rule("browser-cache", "浏览器缓存", "Edge、Chrome 的网页缓存，不删除收藏与登录数据", true,
-                    "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Cache",
-                    "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Code Cache",
-                    "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cache",
-                    "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Code Cache"),
-                PatternRule("thumb-cache", "缩略图缓存", "资源管理器生成的缩略图数据库", true, "thumbcache_*.db",
+                Rule("系统相关", "winsxs-temp", "WinSxS 临时文件（仅分析）", "组件存储临时目录由 TrustedInstaller/CBS 管理，只统计。", "高风险", false, true, 0, null,
+                    "%WINDIR%\\WinSxS\\Temp"),
+                Rule("系统相关", "prefetch", "Windows 预读取文件", "系统用于加速程序启动的预读取记录，默认不勾选。", "谨慎", false, false, 0, new[] { "*.pf" },
+                    "%WINDIR%\\Prefetch"),
+
+                Rule("缓存文件", "edge-cache", "Microsoft Edge 缓存", "网页缓存与代码缓存，不删除收藏、密码和 Cookie。", "安全", true, false, 0, null,
+                    "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Cache", "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Code Cache"),
+                Rule("缓存文件", "chrome-cache", "Google Chrome 缓存", "网页缓存与代码缓存，不删除用户配置。", "安全", true, false, 0, null,
+                    "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Cache", "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Code Cache"),
+                Rule("缓存文件", "firefox-cache", "Mozilla Firefox 缓存", "Firefox 配置目录中的 cache2 内容。", "安全", true, false, 0, null,
+                    "%LOCALAPPDATA%\\Mozilla\\Firefox\\Profiles\\*\\cache2"),
+                Rule("缓存文件", "qq-browser-cache", "QQ 浏览器缓存", "QQ 浏览器的网页缓存，不处理账号与密码数据。", "安全", true, false, 0, null,
+                    "%LOCALAPPDATA%\\Tencent\\QQBrowser\\User Data\\*\\Cache"),
+                Rule("缓存文件", "store-cache", "Microsoft Store 缓存", "商城应用产生的本地缓存目录。", "安全", true, false, 0, null,
+                    "%LOCALAPPDATA%\\Packages\\Microsoft.WindowsStore_*\\LocalCache"),
+                Rule("缓存文件", "onedrive-logs", "OneDrive 日志缓存", "OneDrive 诊断日志与可再生缓存。", "安全", true, false, 0, new[] { "*.log", "*.etl", "*.tmp" },
+                    "%LOCALAPPDATA%\\Microsoft\\OneDrive\\logs"),
+                Rule("缓存文件", "thumbnails", "缩略图缓存", "资源管理器生成的缩略图数据库。", "安全", true, false, 0, new[] { "thumbcache_*.db" },
                     "%LOCALAPPDATA%\\Microsoft\\Windows\\Explorer"),
-                Rule("delivery-cache", "传递优化缓存", "Windows 更新传递优化下载缓存", false,
-                    "%ProgramData%\\Microsoft\\Windows\\DeliveryOptimization\\Cache")
-            };
-        }
+                Rule("缓存文件", "shader-cache", "DirectX 着色器缓存", "图形驱动和 DirectX 产生的可再生着色器缓存。", "安全", true, false, 0, null,
+                    "%LOCALAPPDATA%\\D3DSCache", "%LOCALAPPDATA%\\NVIDIA\\DXCache", "%LOCALAPPDATA%\\AMD\\DxCache"),
 
-        private static IList<CleanupRule> QQRules()
-        {
-            return new List<CleanupRule>
-            {
-                Rule("qq-cache", "QQ 缓存", "QQ 与 NTQQ 生成的可再生缓存", true,
-                    "%LOCALAPPDATA%\\Tencent\\QQ\\Cache",
-                    "%APPDATA%\\Tencent\\QQ\\Cache",
-                    "%USERPROFILE%\\Documents\\Tencent Files\\nt_qq\\global\\nt_data\\Cache"),
-                Rule("qq-temp", "QQ 临时文件", "QQ 运行产生的临时目录", true,
-                    "%APPDATA%\\Tencent\\QQ\\Temp",
-                    "%LOCALAPPDATA%\\Tencent\\QQ\\Temp",
-                    "%USERPROFILE%\\Documents\\Tencent Files\\All Users\\QQ\\Temp"),
-                PatternRule("qq-logs", "QQ 日志", "QQ 客户端诊断日志", true, "*.log",
-                    "%LOCALAPPDATA%\\Tencent\\QQ\\Logs",
-                    "%APPDATA%\\Tencent\\QQ\\Logs")
-            };
-        }
+                Rule("应用程序", "office-cache", "Microsoft Office 文档缓存", "Office 上传中心和文档缓存中的临时内容。", "谨慎", false, false, 7, new[] { "*.tmp", "*.log", "*.cache" },
+                    "%LOCALAPPDATA%\\Microsoft\\Office\\*\\OfficeFileCache"),
+                Rule("应用程序", "development-cache", "开发工具缓存", "NuGet、npm 与 pip 下载缓存，可由工具重新生成。", "安全", false, false, 0, null,
+                    "%USERPROFILE%\\.nuget\\packages", "%APPDATA%\\npm-cache", "%LOCALAPPDATA%\\pip\\Cache"),
+                Rule("应用程序", "adobe-cache", "Adobe 应用缓存", "Adobe 媒体缓存和临时数据。", "安全", false, false, 7, null,
+                    "%APPDATA%\\Adobe\\Common\\Media Cache", "%APPDATA%\\Adobe\\Common\\Media Cache Files"),
 
-        private static IList<CleanupRule> WeChatRules()
-        {
-            return new List<CleanupRule>
-            {
-                Rule("wechat-cache", "微信缓存", "微信账号目录中的 FileStorage Cache", true,
-                    "%USERPROFILE%\\Documents\\WeChat Files\\*\\FileStorage\\Cache",
-                    "%LOCALAPPDATA%\\Tencent\\WeChat\\Cache",
-                    "%APPDATA%\\Tencent\\WeChat\\Cache"),
-                Rule("wechat-temp", "微信临时文件", "微信与新版 xwechat 产生的临时数据", true,
-                    "%USERPROFILE%\\Documents\\WeChat Files\\*\\FileStorage\\Temp",
-                    "%USERPROFILE%\\Documents\\xwechat_files\\*\\temp",
-                    "%LOCALAPPDATA%\\Tencent\\WeChat\\Temp"),
-                PatternRule("wechat-logs", "微信日志", "微信客户端诊断日志", true, "*.log",
-                    "%APPDATA%\\Tencent\\WeChat\\Log",
-                    "%LOCALAPPDATA%\\Tencent\\WeChat\\Log")
+                Rule("临时文件", "user-temp", "用户临时文件", "当前用户 TEMP 目录中的临时文件。", "安全", true, false, 0, null,
+                    "%TEMP%"),
+                Rule("临时文件", "windows-temp", "Windows 临时文件", "Windows Temp 中未被系统占用的临时文件。", "安全", true, false, 0, null,
+                    "%WINDIR%\\Temp"),
+                Rule("临时文件", "download-remnants", "下载未完成残留", "下载目录中超过 7 天的临时下载片段。", "安全", true, false, 7,
+                    new[] { "*.crdownload", "*.part", "*.download", "*.tmp" }, "%USERPROFILE%\\Downloads"),
+                Rule("临时文件", "recycle-bin", "回收站（仅分析）", "回收站内容可能仍需恢复，本工具只统计并交由系统界面清理。", "谨慎", false, true, 0, null,
+                    "%SystemDrive%\\$Recycle.Bin")
             };
         }
 
         private static CleanupRule Rule(
+            string category,
             string id,
             string name,
             string description,
+            string risk,
             bool recommended,
-            params string[] paths)
-        {
-            return PatternRule(id, name, description, recommended, "*", paths);
-        }
-
-        private static CleanupRule PatternRule(
-            string id,
-            string name,
-            string description,
-            bool recommended,
-            string searchPattern,
+            bool scanOnly,
+            int minimumAgeDays,
+            string[] patterns,
             params string[] paths)
         {
             return new CleanupRule
             {
                 Id = id,
                 Name = name,
+                Category = category,
                 Description = description,
-                SearchPattern = searchPattern,
+                Risk = risk,
+                SearchPatterns = (patterns == null || patterns.Length == 0 ? new[] { "*" } : patterns).ToList(),
                 Recursive = true,
                 Recommended = recommended,
+                ScanOnly = scanOnly,
+                MinimumAgeDays = minimumAgeDays,
                 PathTemplates = paths.ToList()
             };
         }
@@ -175,9 +180,15 @@ namespace ZyperWin__
                         foreach (string root in ResolveRoots(template))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
-                            if (!IsSafeCleanupRoot(root) || !Directory.Exists(root)) continue;
+                            if (!IsSafeCleanupRoot(root)) continue;
+                            if (File.Exists(root))
+                            {
+                                AddFile(root, rule, result);
+                                continue;
+                            }
+                            if (!Directory.Exists(root)) continue;
                             result.Roots.Add(root);
-                            ScanRoot(root, rule.SearchPattern, rule.Recursive, result, cancellationToken);
+                            ScanRoot(root, rule, result, cancellationToken);
                         }
                     }
 
@@ -195,8 +206,15 @@ namespace ZyperWin__
             return Task.Run(() =>
             {
                 var result = new CleanupResult();
+                BackupStore.Prune(5000, 1024L * 1024L * 1024L);
                 foreach (CleanupScanResult item in selected)
                 {
+                    if (item.Rule.ScanOnly)
+                    {
+                        result.SkippedFiles += item.FileCount;
+                        OperationLogger.Info("清理", item.Rule.Name + " 为仅分析项，未执行删除");
+                        continue;
+                    }
                     foreach (string file in item.Files)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
@@ -205,6 +223,13 @@ namespace ZyperWin__
                             if (!File.Exists(file)) continue;
                             long length = 0;
                             try { length = new FileInfo(file).Length; } catch { }
+                            string backupError;
+                            if (!BackupStore.TryBackup(file, out backupError))
+                            {
+                                result.FailedFiles++;
+                                OperationLogger.Error("清理备份", backupError);
+                                continue;
+                            }
                             File.SetAttributes(file, FileAttributes.Normal);
                             File.Delete(file);
                             result.DeletedFiles++;
@@ -256,7 +281,7 @@ namespace ZyperWin__
                 if (string.Equals(full, normalized, StringComparison.OrdinalIgnoreCase)) return false;
             }
 
-            return full.Split(Path.DirectorySeparatorChar).Length >= 3;
+            return full.Split(Path.DirectorySeparatorChar).Length >= 2;
         }
 
         private static IEnumerable<string> ResolveRoots(string template)
@@ -291,8 +316,7 @@ namespace ZyperWin__
 
         private static void ScanRoot(
             string root,
-            string searchPattern,
-            bool recursive,
+            CleanupRule rule,
             CleanupScanResult result,
             CancellationToken cancellationToken)
         {
@@ -304,26 +328,22 @@ namespace ZyperWin__
                 cancellationToken.ThrowIfCancellationRequested();
                 string current = directories.Pop();
 
-                string[] files;
-                try { files = Directory.GetFiles(current, searchPattern, SearchOption.TopDirectoryOnly); }
-                catch { files = new string[0]; }
-
-                foreach (string file in files)
+                var uniqueFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string pattern in rule.SearchPatterns)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    try
-                    {
-                        var info = new FileInfo(file);
-                        result.Files.Add(file);
-                        result.FileCount++;
-                        result.Bytes += info.Length;
-                    }
-                    catch
-                    {
-                    }
+                    string[] files;
+                    try { files = Directory.GetFiles(current, pattern, SearchOption.TopDirectoryOnly); }
+                    catch { files = new string[0]; }
+                    foreach (string file in files) uniqueFiles.Add(file);
                 }
 
-                if (!recursive) continue;
+                foreach (string file in uniqueFiles)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    AddFile(file, rule, result);
+                }
+
+                if (!rule.Recursive) continue;
                 string[] children;
                 try { children = Directory.GetDirectories(current); }
                 catch { children = new string[0]; }
@@ -337,6 +357,22 @@ namespace ZyperWin__
                     {
                     }
                 }
+            }
+        }
+
+        private static void AddFile(string file, CleanupRule rule, CleanupScanResult result)
+        {
+            try
+            {
+                var info = new FileInfo(file);
+                if (!info.Exists) return;
+                if (rule.MinimumAgeDays > 0 && info.LastWriteTimeUtc > DateTime.UtcNow.AddDays(-rule.MinimumAgeDays)) return;
+                result.Files.Add(file);
+                result.FileCount++;
+                result.Bytes += info.Length;
+            }
+            catch
+            {
             }
         }
 
