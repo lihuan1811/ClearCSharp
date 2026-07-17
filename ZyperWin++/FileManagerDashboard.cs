@@ -79,6 +79,7 @@ namespace ZyperWin__
             {
                 Dock = DockStyle.Fill,
                 Orientation = Orientation.Vertical,
+                Size = new Size(1040, 280),
                 SplitterDistance = 700,
                 SplitterWidth = 5,
                 BackColor = AppPalette.Border,
@@ -92,6 +93,7 @@ namespace ZyperWin__
             {
                 Dock = DockStyle.Fill,
                 Orientation = Orientation.Horizontal,
+                Size = new Size(1040, 510),
                 SplitterDistance = 290,
                 SplitterWidth = 5,
                 BackColor = AppPalette.Border,
