@@ -23,6 +23,9 @@ namespace ZyperWin__
         public string Name { get; set; }
         public string Version { get; set; }
         public string Publisher { get; set; }
+        public string InstallLocation { get; set; }
+        public string InstallDate { get; set; }
+        public string RegistryPath { get; set; }
         public long EstimatedBytes { get; set; }
         public string UninstallCommand { get; set; }
         public string QuietUninstallCommand { get; set; }
@@ -97,6 +100,11 @@ namespace ZyperWin__
             return Task.Run(() => LaunchDesktopUninstaller(app), cancellationToken);
         }
 
+        public Task<ProcessResult> CleanResidualsAsync(InstalledApp app, bool removeInstallDirectory, CancellationToken cancellationToken)
+        {
+            return Task.Run(() => CleanResiduals(app, removeInstallDirectory, cancellationToken), cancellationToken);
+        }
+
         private static IList<InstalledApp> LoadDesktopApps(CancellationToken cancellationToken)
         {
             var apps = new Dictionary<string, InstalledApp>(StringComparer.OrdinalIgnoreCase);
@@ -150,6 +158,9 @@ namespace ZyperWin__
                                         Name = name.Trim(),
                                         Version = Convert.ToString(key.GetValue("DisplayVersion")),
                                         Publisher = Convert.ToString(key.GetValue("Publisher")),
+                                        InstallLocation = Convert.ToString(key.GetValue("InstallLocation")),
+                                        InstallDate = Convert.ToString(key.GetValue("InstallDate")),
+                                        RegistryPath = (hive == RegistryHive.LocalMachine ? "HKLM\\" : "HKCU\\") + UninstallPath + "\\" + subKeyName,
                                         EstimatedBytes = estimatedBytes,
                                         UninstallCommand = uninstall,
                                         QuietUninstallCommand = Convert.ToString(key.GetValue("QuietUninstallString")),
@@ -175,7 +186,7 @@ namespace ZyperWin__
             string script =
                 "Get-AppxPackage | Where-Object { -not $_.IsFramework -and -not $_.NonRemovable } | " +
                 "ForEach-Object { $_.PackageFullName + '" + separator + "' + $_.Name + '" + separator +
-                "' + $_.Version + '" + separator + "' + $_.PublisherDisplayName }";
+                "' + $_.Version + '" + separator + "' + $_.PublisherDisplayName + '" + separator + "' + $_.InstallLocation }";
             ProcessResult result = await ProcessRunner.RunPowerShellAsync(script, 120000, cancellationToken);
             if (!result.Success) throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.Error) ? "读取商城应用失败。" : result.Error);
 
@@ -190,6 +201,7 @@ namespace ZyperWin__
                     Name = fields[1].Trim(),
                     Version = fields.Length > 2 ? fields[2].Trim() : string.Empty,
                     Publisher = fields.Length > 3 ? fields[3].Trim() : string.Empty,
+                    InstallLocation = fields.Length > 4 ? fields[4].Trim() : string.Empty,
                     Kind = InstalledAppKind.Store
                 });
             }
@@ -231,13 +243,143 @@ namespace ZyperWin__
                 if (process == null)
                     return new ProcessResult { ExitCode = -1, Error = "无法启动卸载程序。", Output = string.Empty };
 
-                OperationLogger.Info("软件卸载", "已启动桌面应用卸载程序：" + app.Name);
-                return new ProcessResult { ExitCode = 0, Output = "卸载程序已启动。", Error = string.Empty };
+                process.WaitForExit();
+                int exitCode = process.ExitCode;
+                bool accepted = exitCode == 0 || exitCode == 1641 || exitCode == 3010;
+                OperationLogger.Info("软件卸载", "卸载程序已结束：" + app.Name + "，退出码 " + exitCode);
+                return new ProcessResult
+                {
+                    ExitCode = accepted ? 0 : exitCode,
+                    Output = "卸载程序已结束，退出码 " + exitCode + "。",
+                    Error = accepted ? string.Empty : "卸载程序返回退出码 " + exitCode
+                };
             }
             catch (Exception ex)
             {
                 return new ProcessResult { ExitCode = -1, Error = ex.Message, Output = string.Empty };
             }
+        }
+
+        private static ProcessResult CleanResiduals(InstalledApp app, bool removeInstallDirectory, CancellationToken cancellationToken)
+        {
+            var messages = new List<string>();
+            var errors = new List<string>();
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!string.IsNullOrWhiteSpace(app.RegistryPath))
+            {
+                try
+                {
+                    string backupDirectory = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "CDiskGlow",
+                        "registry_backups");
+                    Directory.CreateDirectory(backupDirectory);
+                    string safeName = string.Concat(app.Name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+                    string backup = Path.Combine(backupDirectory, safeName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".reg");
+                    ProcessResult export = ProcessRunner.Run("reg.exe", "export \"" + app.RegistryPath + "\" \"" + backup + "\" /y", 60000, cancellationToken);
+                    if (export.Success) messages.Add("已备份卸载注册表：" + backup);
+                    else errors.Add("注册表备份失败：" + export.Error);
+                }
+                catch (Exception ex)
+                {
+                    errors.Add("注册表备份失败：" + ex.Message);
+                }
+            }
+
+            RemoveStartupResiduals(app, Registry.CurrentUser, messages, errors);
+            RemoveStartupResiduals(app, Registry.LocalMachine, messages, errors);
+            RemoveShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), messages, errors);
+            RemoveShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory), messages, errors);
+            RemoveShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.StartMenu), messages, errors);
+            RemoveShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu), messages, errors);
+
+            if (removeInstallDirectory && IsSafeInstallLocation(app.InstallLocation))
+            {
+                try
+                {
+                    if (Directory.Exists(app.InstallLocation))
+                    {
+                        Directory.Delete(app.InstallLocation, true);
+                        messages.Add("已删除安装残留目录：" + app.InstallLocation);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors.Add("删除安装目录失败：" + ex.Message);
+                }
+            }
+
+            string output = string.Join(Environment.NewLine, messages);
+            string error = string.Join(Environment.NewLine, errors);
+            OperationLogger.Info("卸载残留", app.Name + "，完成 " + messages.Count + " 项，失败 " + errors.Count + " 项");
+            return new ProcessResult { ExitCode = errors.Count == 0 ? 0 : 1, Output = output, Error = error };
+        }
+
+        private static void RemoveStartupResiduals(InstalledApp app, RegistryKey hive, IList<string> messages, IList<string> errors)
+        {
+            try
+            {
+                using (RegistryKey run = hive.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
+                {
+                    if (run == null) return;
+                    foreach (string valueName in run.GetValueNames())
+                    {
+                        string value = Convert.ToString(run.GetValue(valueName));
+                        if (!MatchesApplication(app, valueName + " " + value)) continue;
+                        run.DeleteValue(valueName, false);
+                        messages.Add("已删除启动项：" + valueName);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add("清理启动项失败：" + ex.Message);
+            }
+        }
+
+        private static void RemoveShortcuts(InstalledApp app, string root, IList<string> messages, IList<string> errors)
+        {
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return;
+            try
+            {
+                foreach (string shortcut in Directory.GetFiles(root, "*.lnk", SearchOption.AllDirectories))
+                {
+                    if (!MatchesApplication(app, Path.GetFileNameWithoutExtension(shortcut))) continue;
+                    File.Delete(shortcut);
+                    messages.Add("已删除快捷方式：" + shortcut);
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add("清理快捷方式失败：" + ex.Message);
+            }
+        }
+
+        private static bool MatchesApplication(InstalledApp app, string value)
+        {
+            string text = value ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(app.InstallLocation) && text.IndexOf(app.InstallLocation, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return !string.IsNullOrWhiteSpace(app.Name) && text.IndexOf(app.Name, StringComparison.CurrentCultureIgnoreCase) >= 0;
+        }
+
+        private static bool IsSafeInstallLocation(string location)
+        {
+            if (string.IsNullOrWhiteSpace(location) || !Directory.Exists(location)) return false;
+            string full;
+            try { full = Path.GetFullPath(location).TrimEnd(Path.DirectorySeparatorChar); }
+            catch { return false; }
+            string[] protectedRoots =
+            {
+                Path.GetPathRoot(full),
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+            };
+            return protectedRoots
+                .Where(root => !string.IsNullOrWhiteSpace(root))
+                .All(root => !string.Equals(full, Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase));
         }
     }
 }

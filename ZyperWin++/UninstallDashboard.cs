@@ -16,12 +16,15 @@ namespace ZyperWin__
         private readonly Button desktopButton = UiFactory.SecondaryButton("应用程序");
         private readonly Button storeButton = UiFactory.SecondaryButton("Windows 商城应用");
         private readonly Button refreshButton = UiFactory.PrimaryButton("刷新列表");
-        private readonly Button uninstallButton = UiFactory.SecondaryButton("卸载选中");
+        private readonly Button uninstallButton = UiFactory.PrimaryButton("批量卸载选中");
+        private readonly Button forceButton = UiFactory.SecondaryButton("强力卸载");
+        private readonly Button residualButton = UiFactory.SecondaryButton("清理卸载残留");
         private readonly Label status = UiFactory.StatusLabel("正在准备应用列表...");
         private readonly ProgressBar progress = new ProgressBar();
         private IList<InstalledApp> allApps = new List<InstalledApp>();
         private InstalledAppKind currentKind = InstalledAppKind.Desktop;
-        private CancellationTokenSource cancellation;
+        private CancellationTokenSource loadCancellation;
+        private CancellationTokenSource operationCancellation;
 
         public UninstallDashboard()
         {
@@ -31,8 +34,8 @@ namespace ZyperWin__
 
             FlowLayoutPanel headerActions;
             Panel header = UiFactory.Header(
-                "软件卸载",
-                "桌面应用与 Windows 商城应用分开显示，卸载前会再次确认。",
+                "软件强力卸载",
+                "注册表应用与 Windows 商城应用分类显示，支持搜索、批量卸载、备份和残留清理。",
                 out headerActions);
             desktopButton.Width = 104;
             storeButton.Width = 154;
@@ -70,19 +73,25 @@ namespace ZyperWin__
             var bottom = new TableLayoutPanel
             {
                 Dock = DockStyle.Bottom,
-                Height = 58,
+                Height = 60,
                 ColumnCount = 3,
                 Padding = new Padding(0, 8, 0, 0)
             };
             bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190F));
+            bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150F));
             bottom.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             bottom.Controls.Add(status, 0, 0);
             progress.Dock = DockStyle.Fill;
-            progress.Margin = new Padding(8, 8, 8, 8);
+            progress.Margin = new Padding(8);
             bottom.Controls.Add(progress, 1, 0);
-            uninstallButton.Width = 110;
-            bottom.Controls.Add(uninstallButton, 2, 0);
+            var actions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
+            residualButton.Width = 126;
+            forceButton.Width = 100;
+            uninstallButton.Width = 126;
+            actions.Controls.Add(residualButton);
+            actions.Controls.Add(forceButton);
+            actions.Controls.Add(uninstallButton);
+            bottom.Controls.Add(actions, 2, 0);
 
             Controls.Add(grid);
             Controls.Add(bottom);
@@ -92,44 +101,31 @@ namespace ZyperWin__
             desktopButton.Click += async delegate { await SwitchKindAsync(InstalledAppKind.Desktop); };
             storeButton.Click += async delegate { await SwitchKindAsync(InstalledAppKind.Store); };
             refreshButton.Click += async delegate { await LoadAppsAsync(); };
-            uninstallButton.Click += async delegate { await UninstallSelectedAsync(); };
+            uninstallButton.Click += async delegate { await UninstallSelectedAsync(false); };
+            forceButton.Click += async delegate { await UninstallSelectedAsync(true); };
+            residualButton.Click += async delegate { await CleanResidualsAsync(); };
             searchBox.TextChanged += delegate { ApplyFilter(); };
             Load += async delegate { await SwitchKindAsync(InstalledAppKind.Desktop); };
         }
 
         private void ConfigureGrid()
         {
-            grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Name",
-                HeaderText = "名称",
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-                MinimumWidth = 250
-            });
-            grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Version",
-                HeaderText = "版本",
-                Width = 135
-            });
-            grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Publisher",
-                HeaderText = "发布者",
-                Width = 210
-            });
-            grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Size",
-                HeaderText = "估算大小",
-                Width = 105
-            });
-            grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Kind",
-                HeaderText = "类型",
-                Width = 125
-            });
+            grid.ReadOnly = false;
+            grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Selected", HeaderText = "", Width = 42, ReadOnly = false });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "名称", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 220 });
+            grid.Columns.Add(Column("Version", "版本", 115));
+            grid.Columns.Add(Column("Publisher", "发布者", 170));
+            grid.Columns.Add(Column("Size", "估算大小", 96));
+            grid.Columns.Add(Column("Kind", "类型", 120));
+            grid.Columns.Add(Column("InstallDate", "安装日期", 102));
+            grid.Columns.Add(Column("InstallLocation", "安装路径", 230));
+            foreach (DataGridViewColumn column in grid.Columns)
+                if (column.Name != "Selected") column.ReadOnly = true;
+        }
+
+        private static DataGridViewTextBoxColumn Column(string name, string title, int width)
+        {
+            return new DataGridViewTextBoxColumn { Name = name, HeaderText = title, Width = width };
         }
 
         private async Task SwitchKindAsync(InstalledAppKind kind)
@@ -139,21 +135,26 @@ namespace ZyperWin__
             desktopButton.ForeColor = kind == InstalledAppKind.Desktop ? Color.White : AppPalette.Green;
             storeButton.BackColor = kind == InstalledAppKind.Store ? AppPalette.Green : Color.White;
             storeButton.ForeColor = kind == InstalledAppKind.Store ? Color.White : AppPalette.Green;
+            residualButton.Enabled = kind == InstalledAppKind.Desktop;
+            forceButton.Enabled = kind == InstalledAppKind.Desktop;
             await LoadAppsAsync();
         }
 
         private async Task LoadAppsAsync()
         {
-            if (cancellation != null) cancellation.Cancel();
-            cancellation = new CancellationTokenSource();
+            if (loadCancellation != null) loadCancellation.Cancel();
+            var source = new CancellationTokenSource();
+            loadCancellation = source;
+            InstalledAppKind requestedKind = currentKind;
             SetBusy(true);
             status.Text = currentKind == InstalledAppKind.Desktop ? "正在读取注册表应用列表..." : "正在读取 Windows 商城应用...";
             try
             {
-                allApps = await service.LoadAsync(currentKind, cancellation.Token);
+                IList<InstalledApp> loaded = await service.LoadAsync(requestedKind, source.Token);
+                if (source.IsCancellationRequested || requestedKind != currentKind) return;
+                allApps = loaded;
                 ApplyFilter();
-                status.Text = string.Format("已加载 {0:N0} 个{1}。", allApps.Count,
-                    currentKind == InstalledAppKind.Desktop ? "桌面应用" : "商城应用");
+                status.Text = string.Format("读取完成：{0} {1}项。", currentKind == InstalledAppKind.Desktop ? "应用程序" : "Windows 商城应用", allApps.Count);
             }
             catch (OperationCanceledException)
             {
@@ -168,87 +169,150 @@ namespace ZyperWin__
             }
             finally
             {
-                if (cancellation != null)
-                {
-                    cancellation.Dispose();
-                    cancellation = null;
-                }
-                SetBusy(false);
+                bool isCurrentRequest = ReferenceEquals(loadCancellation, source);
+                if (isCurrentRequest) loadCancellation = null;
+                source.Dispose();
+                if (isCurrentRequest && !IsDisposed) SetBusy(false);
             }
         }
 
         private void ApplyFilter()
         {
             string filter = searchBox.Text.Trim();
-            grid.Rows.Clear();
             IEnumerable<InstalledApp> apps = allApps;
             if (filter.Length > 0)
             {
                 apps = apps.Where(app =>
                     app.Name.IndexOf(filter, StringComparison.CurrentCultureIgnoreCase) >= 0 ||
-                    (app.Publisher ?? string.Empty).IndexOf(filter, StringComparison.CurrentCultureIgnoreCase) >= 0);
+                    (app.Publisher ?? string.Empty).IndexOf(filter, StringComparison.CurrentCultureIgnoreCase) >= 0 ||
+                    (app.InstallLocation ?? string.Empty).IndexOf(filter, StringComparison.CurrentCultureIgnoreCase) >= 0);
             }
-
+            grid.Rows.Clear();
             foreach (InstalledApp app in apps)
             {
-                int index = grid.Rows.Add(
-                    app.Name,
-                    app.Version,
-                    app.Publisher,
-                    app.SizeText,
-                    app.Kind == InstalledAppKind.Desktop ? "应用程序" : "Windows 商城应用");
+                int index = grid.Rows.Add(false, app.Name, app.Version, app.Publisher, app.SizeText,
+                    app.Kind == InstalledAppKind.Desktop ? "应用程序" : "Windows 商城应用",
+                    FormatInstallDate(app.InstallDate), app.InstallLocation);
                 grid.Rows[index].Tag = app;
             }
         }
 
-        private async Task UninstallSelectedAsync()
+        private List<InstalledApp> SelectedApps()
         {
-            if (grid.SelectedRows.Count == 0)
+            var selected = new List<InstalledApp>();
+            foreach (DataGridViewRow row in grid.Rows)
             {
-                MessageBox.Show("请先选择一个应用。", "C DiskGlow", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (Convert.ToBoolean(row.Cells["Selected"].Value ?? false) && row.Tag is InstalledApp)
+                    selected.Add((InstalledApp)row.Tag);
+            }
+            if (selected.Count == 0 && grid.SelectedRows.Count > 0 && grid.SelectedRows[0].Tag is InstalledApp)
+                selected.Add((InstalledApp)grid.SelectedRows[0].Tag);
+            return selected;
+        }
+
+        private async Task UninstallSelectedAsync(bool force)
+        {
+            List<InstalledApp> selected = SelectedApps();
+            if (selected.Count == 0)
+            {
+                MessageBox.Show("请先勾选要卸载的应用。", "C DiskGlow", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            var app = grid.SelectedRows[0].Tag as InstalledApp;
-            if (app == null) return;
-
-            DialogResult answer = MessageBox.Show(
-                "即将卸载：" + app.Name + "\n\n该操作由应用自己的卸载程序或 Windows Remove-AppxPackage 执行，是否继续？",
-                "确认卸载",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning);
-            if (answer != DialogResult.Yes) return;
+            string preview = string.Join(Environment.NewLine, selected.Take(8).Select(app => app.Name));
+            string warning = force ? "\n\n强力模式会在卸载完成后删除确认过的安装目录、启动项和快捷方式残留。" : string.Empty;
+            if (MessageBox.Show("即将卸载 " + selected.Count + " 个应用：\n\n" + preview + warning + "\n\n是否继续？",
+                force ? "确认强力卸载" : "确认批量卸载", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
             SetBusy(true);
-            status.Text = "正在启动卸载：" + app.Name;
-            var source = new CancellationTokenSource();
+            operationCancellation = new CancellationTokenSource();
+            progress.Style = ProgressBarStyle.Continuous;
+            progress.Minimum = 0;
+            progress.Maximum = selected.Count;
+            progress.Value = 0;
+            int succeeded = 0;
+            var failures = new List<string>();
             try
             {
-                ProcessResult result = await service.UninstallAsync(app, source.Token);
-                if (!result.Success)
+                for (int index = 0; index < selected.Count; index++)
                 {
-                    string error = string.IsNullOrWhiteSpace(result.Error) ? "卸载命令执行失败。" : result.Error;
-                    OperationLogger.Error("软件卸载", app.Name + "：" + error);
-                    MessageBox.Show(error, "卸载失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    status.Text = "卸载失败：" + app.Name;
-                    return;
+                    InstalledApp app = selected[index];
+                    status.Text = string.Format("正在卸载 {0}/{1}：{2}", index + 1, selected.Count, app.Name);
+                    ProcessResult result = await service.UninstallAsync(app, operationCancellation.Token);
+                    if (result.Success)
+                    {
+                        succeeded++;
+                        if (force && app.Kind == InstalledAppKind.Desktop)
+                        {
+                            ProcessResult residual = await service.CleanResidualsAsync(app, true, operationCancellation.Token);
+                            if (!residual.Success) failures.Add(app.Name + " 残留：" + residual.Error);
+                        }
+                    }
+                    else failures.Add(app.Name + "：" + (string.IsNullOrWhiteSpace(result.Error) ? "卸载命令失败" : result.Error));
+                    progress.Value = index + 1;
                 }
-
-                OperationLogger.Info("软件卸载", "已执行卸载：" + app.Name);
-                status.Text = app.Kind == InstalledAppKind.Desktop
-                    ? "卸载程序已启动，请按卸载向导完成操作。"
-                    : "商城应用已卸载。";
-                if (app.Kind == InstalledAppKind.Store) await LoadAppsAsync();
+                status.Text = string.Format("卸载完成：成功 {0}，失败 {1}。", succeeded, failures.Count);
+                OperationLogger.Info("软件卸载", status.Text);
+                if (failures.Count > 0)
+                    MessageBox.Show(string.Join(Environment.NewLine, failures.Take(10)), "部分卸载失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (OperationCanceledException)
+            {
+                status.Text = "卸载已取消。";
             }
             catch (Exception ex)
             {
                 status.Text = "卸载失败：" + ex.Message;
-                OperationLogger.Error("软件卸载", app.Name + "：" + ex.Message);
+                OperationLogger.Error("软件卸载", ex.Message);
                 MessageBox.Show(ex.Message, "卸载失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
-                source.Dispose();
-                SetBusy(false);
+                operationCancellation.Dispose();
+                operationCancellation = null;
+                if (!IsDisposed)
+                {
+                    SetBusy(false);
+                    await LoadAppsAsync();
+                }
+            }
+        }
+
+        private async Task CleanResidualsAsync()
+        {
+            List<InstalledApp> selected = SelectedApps();
+            InstalledApp app = selected.FirstOrDefault();
+            if (app == null || app.Kind != InstalledAppKind.Desktop)
+            {
+                MessageBox.Show("请选择一个桌面应用。", "C DiskGlow", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (MessageBox.Show("将导出卸载注册表备份，并清理启动项、快捷方式和安装目录残留：\n\n" + app.Name + "\n" + app.InstallLocation + "\n\n是否继续？",
+                "确认清理卸载残留", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+
+            SetBusy(true);
+            operationCancellation = new CancellationTokenSource();
+            try
+            {
+                ProcessResult result = await service.CleanResidualsAsync(app, true, operationCancellation.Token);
+                status.Text = result.Success ? "卸载残留清理完成。" : "部分残留清理失败。";
+                MessageBox.Show((result.Output + Environment.NewLine + result.Error).Trim(), status.Text,
+                    MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            }
+            catch (OperationCanceledException)
+            {
+                status.Text = "残留清理已取消。";
+            }
+            catch (Exception ex)
+            {
+                status.Text = "残留清理失败：" + DisplayFormat.SingleLine(ex.Message, 160);
+                OperationLogger.Error("卸载残留", ex.Message);
+                MessageBox.Show(ex.Message, "残留清理失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                operationCancellation.Dispose();
+                operationCancellation = null;
+                if (!IsDisposed) SetBusy(false);
             }
         }
 
@@ -258,9 +322,31 @@ namespace ZyperWin__
             uninstallButton.Enabled = !busy;
             desktopButton.Enabled = !busy;
             storeButton.Enabled = !busy;
+            forceButton.Enabled = !busy && currentKind == InstalledAppKind.Desktop;
+            residualButton.Enabled = !busy && currentKind == InstalledAppKind.Desktop;
             grid.Enabled = !busy;
-            progress.Style = busy ? ProgressBarStyle.Marquee : ProgressBarStyle.Blocks;
-            if (!busy) progress.Value = 0;
+            if (busy && progress.Style != ProgressBarStyle.Continuous) progress.Style = ProgressBarStyle.Marquee;
+            if (!busy)
+            {
+                progress.Style = ProgressBarStyle.Blocks;
+                progress.Value = 0;
+            }
+        }
+
+        private static string FormatInstallDate(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length != 8) return value;
+            return value.Substring(0, 4) + "-" + value.Substring(4, 2) + "-" + value.Substring(6, 2);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (loadCancellation != null) loadCancellation.Cancel();
+                if (operationCancellation != null) operationCancellation.Cancel();
+            }
+            base.Dispose(disposing);
         }
     }
 }
