@@ -81,6 +81,18 @@ namespace CDriveCleaner.Tests
             string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             Assert(!CleanupService.IsSafeCleanupRoot(user), "user profile root must be protected");
             Assert(!CleanupService.IsSafeCleanupRoot(Path.GetPathRoot(Environment.CurrentDirectory)), "drive root must be protected");
+
+            string whitelistRoot = Path.Combine(Path.GetTempPath(), "CDiskGlowWhitelist_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(whitelistRoot, "child"));
+            try
+            {
+                Assert(CleanupWhitelist.Contains(Path.Combine(whitelistRoot, "child", "file.tmp"), new[] { whitelistRoot }),
+                    "cleanup whitelist must protect child paths");
+            }
+            finally
+            {
+                Directory.Delete(whitelistRoot, true);
+            }
         }
 
         private static void TestFinalNavigation()

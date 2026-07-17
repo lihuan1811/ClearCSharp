@@ -107,7 +107,7 @@ namespace ZyperWin__
                 foreach (GpuInfo gpu in devices)
                 {
                     string api = gpu.NvidiaSmiAvailable ? "nvidia-smi" :
-                        gpu.AdlxEntryAvailable ? "AMD 官方入口" :
+                        gpu.AdlxEntryAvailable ? "AMD ADLX" :
                         !string.IsNullOrWhiteSpace(gpu.ControlPanelPath) ? "厂商官方入口" : "基础信息";
                     int index = grid.Rows.Add(
                         gpu.Name,

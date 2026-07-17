@@ -163,6 +163,7 @@ namespace ZyperWin__
             return Task.Run<IList<CleanupScanResult>>(() =>
             {
                 var results = new List<CleanupScanResult>();
+                IList<string> whitelist = CleanupWhitelist.ReadAll();
                 foreach (var rule in CleanupCatalog.GetRules(kind))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -180,15 +181,16 @@ namespace ZyperWin__
                         foreach (string root in ResolveRoots(template))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
+                            if (CleanupWhitelist.Contains(root, whitelist)) continue;
                             if (!IsSafeCleanupRoot(root)) continue;
                             if (File.Exists(root))
                             {
-                                AddFile(root, rule, result);
+                                AddFile(root, rule, result, whitelist);
                                 continue;
                             }
                             if (!Directory.Exists(root)) continue;
                             result.Roots.Add(root);
-                            ScanRoot(root, rule, result, cancellationToken);
+                            ScanRoot(root, rule, result, whitelist, cancellationToken);
                         }
                     }
 
@@ -318,6 +320,7 @@ namespace ZyperWin__
             string root,
             CleanupRule rule,
             CleanupScanResult result,
+            IList<string> whitelist,
             CancellationToken cancellationToken)
         {
             var directories = new Stack<string>();
@@ -340,7 +343,7 @@ namespace ZyperWin__
                 foreach (string file in uniqueFiles)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    AddFile(file, rule, result);
+                    AddFile(file, rule, result, whitelist);
                 }
 
                 if (!rule.Recursive) continue;
@@ -351,6 +354,7 @@ namespace ZyperWin__
                 {
                     try
                     {
+                        if (CleanupWhitelist.Contains(child, whitelist)) continue;
                         if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0) directories.Push(child);
                     }
                     catch
@@ -360,10 +364,11 @@ namespace ZyperWin__
             }
         }
 
-        private static void AddFile(string file, CleanupRule rule, CleanupScanResult result)
+        private static void AddFile(string file, CleanupRule rule, CleanupScanResult result, IList<string> whitelist)
         {
             try
             {
+                if (CleanupWhitelist.Contains(file, whitelist)) return;
                 var info = new FileInfo(file);
                 if (!info.Exists) return;
                 if (rule.MinimumAgeDays > 0 && info.LastWriteTimeUtc > DateTime.UtcNow.AddDays(-rule.MinimumAgeDays)) return;

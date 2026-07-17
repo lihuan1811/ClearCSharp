@@ -18,6 +18,9 @@ namespace ZyperWin__
         private readonly Button cleanButton = UiFactory.SecondaryButton("清理选中");
         private readonly Button selectRecommendedButton = UiFactory.SecondaryButton("默认");
         private readonly Button selectNoneButton = UiFactory.SecondaryButton("全不选");
+        private readonly Button refreshButton = UiFactory.SecondaryButton("刷新");
+        private readonly Button addWhitelistButton = UiFactory.SecondaryButton("添加白名单");
+        private readonly Button manageWhitelistButton = UiFactory.SecondaryButton("管理白名单");
         private CancellationTokenSource cancellation;
 
         public CleanupDashboard()
@@ -33,6 +36,12 @@ namespace ZyperWin__
                 out headerActions);
             selectNoneButton.Width = 82;
             selectRecommendedButton.Width = 82;
+            refreshButton.Width = 82;
+            addWhitelistButton.Width = 100;
+            manageWhitelistButton.Width = 100;
+            headerActions.Controls.Add(manageWhitelistButton);
+            headerActions.Controls.Add(addWhitelistButton);
+            headerActions.Controls.Add(refreshButton);
             headerActions.Controls.Add(selectNoneButton);
             headerActions.Controls.Add(selectRecommendedButton);
 
@@ -79,6 +88,9 @@ namespace ZyperWin__
             cleanButton.Click += async delegate { await CleanAsync(); };
             selectRecommendedButton.Click += delegate { SelectRecommended(); };
             selectNoneButton.Click += delegate { SelectNone(); };
+            refreshButton.Click += delegate { PopulateRules(); };
+            addWhitelistButton.Click += AddWhitelistButton_Click;
+            manageWhitelistButton.Click += delegate { using (var dialog = new CleanupWhitelistDialog()) dialog.ShowDialog(this); };
             PopulateRules();
         }
 
@@ -317,7 +329,33 @@ namespace ZyperWin__
             cleanButton.Enabled = !busy;
             selectRecommendedButton.Enabled = !busy;
             selectNoneButton.Enabled = !busy;
+            refreshButton.Enabled = !busy;
+            addWhitelistButton.Enabled = !busy;
+            manageWhitelistButton.Enabled = !busy;
             grid.Enabled = !busy;
+        }
+
+        private void AddWhitelistButton_Click(object sender, EventArgs e)
+        {
+            DialogResult kind = MessageBox.Show("添加文件到白名单请选择“是”，添加文件夹请选择“否”。",
+                "添加清理白名单", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+            if (kind == DialogResult.Cancel) return;
+            string path = null;
+            if (kind == DialogResult.Yes)
+            {
+                using (var dialog = new OpenFileDialog { Title = "选择不参与清理的文件", CheckFileExists = true, Multiselect = false })
+                    if (dialog.ShowDialog(this) == DialogResult.OK) path = dialog.FileName;
+            }
+            else
+            {
+                using (var dialog = new FolderBrowserDialog { Description = "选择不参与清理的文件夹", ShowNewFolderButton = false })
+                    if (dialog.ShowDialog(this) == DialogResult.OK) path = dialog.SelectedPath;
+            }
+            if (string.IsNullOrWhiteSpace(path)) return;
+            string error;
+            if (!CleanupWhitelist.Add(path, out error))
+                MessageBox.Show(error, "添加白名单失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            else status.Text = "已添加清理白名单：" + path;
         }
 
         private void SelectNone()

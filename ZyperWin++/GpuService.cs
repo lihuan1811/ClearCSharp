@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Management;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -40,6 +41,15 @@ namespace ZyperWin__
 
     public sealed class GpuService
     {
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr LoadLibrary(string fileName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
+        private static extern IntPtr GetProcAddress(IntPtr module, string procedureName);
+
+        [DllImport("kernel32.dll")]
+        private static extern bool FreeLibrary(IntPtr module);
+
         public Task<IList<GpuInfo>> DetectAsync(CancellationToken cancellationToken)
         {
             return Task.Run<IList<GpuInfo>>(() =>
@@ -123,10 +133,13 @@ namespace ZyperWin__
                 target.SupportedOperations.Add("生成 NVIDIA 状态报告");
             }
 
-            string nvapi = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "nvapi64.dll");
+            string nvapi = FindFile(
+                Environment.Is64BitOperatingSystem ? "nvapi64.dll" : "nvapi.dll",
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32",
+                    Environment.Is64BitOperatingSystem ? "nvapi64.dll" : "nvapi.dll"));
             foreach (GpuInfo gpu in items.Where(value => value.Vendor == GpuVendor.Nvidia))
             {
-                gpu.NvApiAvailable = File.Exists(nvapi);
+                gpu.NvApiAvailable = HasExport(nvapi, "nvapi_QueryInterface");
                 if (gpu.NvApiAvailable) gpu.SupportedOperations.Add("检测到 NVAPI 驱动入口");
             }
         }
@@ -148,8 +161,15 @@ namespace ZyperWin__
                             "RadeonSoftware.exe",
                             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                                 "AMD", "CNext", "CNext", "RadeonSoftware.exe"));
-                        gpu.AdlxEntryAvailable = !string.IsNullOrWhiteSpace(gpu.ControlPanelPath);
-                        if (gpu.AdlxEntryAvailable) gpu.SupportedOperations.Add("打开 AMD Software 官方调优入口");
+                        string adlx = FindFile(
+                            Environment.Is64BitOperatingSystem ? "amdadlx64.dll" : "amdadlx32.dll",
+                            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32",
+                                Environment.Is64BitOperatingSystem ? "amdadlx64.dll" : "amdadlx32.dll"),
+                            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "AMD", "CNext", "CNext",
+                                Environment.Is64BitOperatingSystem ? "amdadlx64.dll" : "amdadlx32.dll"));
+                        gpu.AdlxEntryAvailable = !string.IsNullOrWhiteSpace(adlx);
+                        if (gpu.AdlxEntryAvailable) gpu.SupportedOperations.Add("检测到 AMD ADLX 驱动入口");
+                        if (!string.IsNullOrWhiteSpace(gpu.ControlPanelPath)) gpu.SupportedOperations.Add("打开 AMD Software 官方调优入口");
                         break;
                     case GpuVendor.Intel:
                         gpu.ControlPanelPath = FindFile(
@@ -197,6 +217,25 @@ namespace ZyperWin__
                 }
             }
             return null;
+        }
+
+        private static bool HasExport(string libraryPath, string exportName)
+        {
+            if (string.IsNullOrWhiteSpace(libraryPath) || !File.Exists(libraryPath)) return false;
+            IntPtr module = IntPtr.Zero;
+            try
+            {
+                module = LoadLibrary(libraryPath);
+                return module != IntPtr.Zero && GetProcAddress(module, exportName) != IntPtr.Zero;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (module != IntPtr.Zero) FreeLibrary(module);
+            }
         }
     }
 }

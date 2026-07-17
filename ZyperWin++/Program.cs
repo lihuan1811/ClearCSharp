@@ -13,6 +13,22 @@ namespace ZyperWin__
         [STAThread]
         private static int Main(string[] args)
         {
+            try
+            {
+                return RunApplication(args);
+            }
+            catch (Exception ex)
+            {
+                if (Array.Exists(args ?? new string[0], value => string.Equals(value, "--smoke-test", StringComparison.OrdinalIgnoreCase)))
+                    WriteSmokeError(ex);
+                else
+                    MessageBox.Show(ex.ToString(), "C DiskGlow 启动失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 1;
+            }
+        }
+
+        private static int RunApplication(string[] args)
+        {
             AppDomain.CurrentDomain.AssemblyResolve += ResolveEmbeddedAssembly;
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -41,38 +57,47 @@ namespace ZyperWin__
 
         private static int RunSmokeTest()
         {
-            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-            Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs args)
-            {
-                WriteSmokeError(args.Exception);
-                Environment.Exit(1);
-            };
-            AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs args)
-            {
-                WriteSmokeError(args.ExceptionObject as Exception ?? new Exception(Convert.ToString(args.ExceptionObject)));
-            };
             try
             {
+                TraceSmoke("enter");
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+                Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs args)
+                {
+                    WriteSmokeError(args.Exception);
+                    Environment.Exit(1);
+                };
+                AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs args)
+                {
+                    WriteSmokeError(args.ExceptionObject as Exception ?? new Exception(Convert.ToString(args.ExceptionObject)));
+                };
+                TraceSmoke("handlers-ready");
                 using (var shell = new MainWindow())
                 {
+                    TraceSmoke("main-window-constructed");
                     shell.CreateControl();
                     shell.PerformLayout();
+                    TraceSmoke("main-window-handle-created");
                 }
-                Control[] modules =
+                TraceSmoke("main-window-disposed");
+                Func<Control>[] moduleFactories =
                 {
-                    new CleanupDashboard(),
-                    new UninstallDashboard(),
-                    new SystemOptimizationDashboard(),
-                    new FileManagerDashboard(),
-                    new RepairDashboard()
+                    () => new CleanupDashboard(),
+                    () => new UninstallDashboard(),
+                    () => new SystemOptimizationDashboard(),
+                    () => new FileManagerDashboard(),
+                    () => new RepairDashboard()
                 };
-                foreach (Control module in modules)
+                string[] moduleNames = { "cleanup", "uninstall", "optimization", "file-manager", "repair" };
+                for (int index = 0; index < moduleFactories.Length; index++)
                 {
-                    using (module)
+                    using (Control module = moduleFactories[index]())
                     {
+                        TraceSmoke(moduleNames[index] + "-constructed");
                         module.PerformLayout();
                     }
+                    TraceSmoke(moduleNames[index] + "-disposed");
                 }
+                TraceSmoke("complete");
                 File.WriteAllText("smoke-test-ok.txt", "C DiskGlow module construction passed.");
                 return 0;
             }
@@ -86,6 +111,12 @@ namespace ZyperWin__
         private static void WriteSmokeError(Exception exception)
         {
             try { File.WriteAllText("smoke-test-error.txt", exception == null ? "Unknown smoke-test error." : exception.ToString()); }
+            catch { }
+        }
+
+        private static void TraceSmoke(string message)
+        {
+            try { File.AppendAllText("smoke-test-trace.txt", DateTime.UtcNow.ToString("o") + " " + message + Environment.NewLine); }
             catch { }
         }
 

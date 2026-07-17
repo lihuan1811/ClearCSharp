@@ -33,6 +33,9 @@ jobs:
         run: |
           $process = Start-Process '.\ZyperWin++\bin\Release\C DiskGlow.exe' -ArgumentList '--smoke-test' -Wait -PassThru
           if ($process.ExitCode -ne 0) {
+            if (Test-Path '.\smoke-test-trace.txt') {
+              Get-Content '.\smoke-test-trace.txt'
+            }
             if (Test-Path '.\smoke-test-error.txt') {
               Get-Content '.\smoke-test-error.txt'
             }

@@ -55,6 +55,8 @@
     <Compile Include="BackupStore.cs" />
     <Compile Include="CleanupDashboard.cs" />
     <Compile Include="CleanupService.cs" />
+    <Compile Include="CleanupWhitelist.cs" />
+    <Compile Include="CleanupWhitelistDialog.cs" />
     <Compile Include="DiskAnalysisService.cs" />
     <Compile Include="FileManagerDashboard.cs" />
     <Compile Include="FileManagerShell.cs" />
