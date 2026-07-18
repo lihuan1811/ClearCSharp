@@ -11,6 +11,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <ProjectReference Include="..\ZyperWin++\ZyperWin++.csproj" />
+    <ProjectReference Include="..\ZyperWin++\ZyperWin++.csproj" AdditionalProperties="TargetFramework=net8.0-windows" />
   </ItemGroup>
 </Project>

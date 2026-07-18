@@ -30,6 +30,9 @@ namespace ZyperWin__
         private CancellationTokenSource cancellation;
         private CleanupScanResult visibleFiles;
         private bool changingSelection;
+        private IList<object> cleanupItems = new List<object>();
+        private readonly HashSet<string> collapsedCategories = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> selectedRuleIds = new HashSet<string>(StringComparer.Ordinal);
 
         public CleanupDashboard()
         {
@@ -117,6 +120,8 @@ namespace ZyperWin__
                 if (grid.IsCurrentCellDirty) grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
             };
             grid.CellValueChanged += Grid_CellValueChanged;
+            grid.CellClick += Grid_CellClick;
+            grid.CellToolTipTextNeeded += Grid_CellToolTipTextNeeded;
             PopulateRules();
         }
 
@@ -240,26 +245,87 @@ namespace ZyperWin__
         {
             visibleFiles = null;
             fileGrid.RowCount = 0;
+            cleanupItems = CleanupCatalog.GetRules(CleanupKind.DriveC).Cast<object>().ToList();
+            selectedRuleIds.Clear();
+            foreach (CleanupRule rule in cleanupItems.Cast<CleanupRule>().Where(value => value.Recommended && !value.ScanOnly))
+                selectedRuleIds.Add(rule.Id);
+            RenderRuleGroups();
+            status.Text = "已加载 " + cleanupItems.Count + " 条清理规则，点击分类可展开或收起。";
+        }
+
+        private void RenderRuleGroups()
+        {
+            grid.SuspendLayout();
             grid.Rows.Clear();
-            foreach (CleanupRule rule in CleanupCatalog.GetRules(CleanupKind.DriveC))
+            foreach (IGrouping<string, object> group in cleanupItems.GroupBy(value => RuleFrom(value).Category))
             {
-                int index = grid.Rows.Add(
-                    rule.Recommended && !rule.ScanOnly,
-                    rule.Category,
-                    rule.Name,
-                    rule.Description,
-                    rule.Risk,
-                    "待扫描",
-                    "--",
-                    string.Join("；", rule.PathTemplates.Select(Environment.ExpandEnvironmentVariables)));
-                grid.Rows[index].Tag = rule;
-                if (rule.ScanOnly)
+                bool collapsed = collapsedCategories.Contains(group.Key);
+                int headerIndex = grid.Rows.Add(false, "分组", (collapsed ? "[+] " : "[-] ") + group.Key + "（" + group.Count() + "）",
+                    "点击此行" + (collapsed ? "展开" : "收起") + "该分类", string.Empty, string.Empty, string.Empty, string.Empty);
+                DataGridViewRow header = grid.Rows[headerIndex];
+                header.Tag = new CleanupCategoryHeader(group.Key);
+                header.Cells["Selected"].ReadOnly = true;
+                header.DefaultCellStyle.BackColor = AppPalette.PaleGreen;
+                header.DefaultCellStyle.ForeColor = AppPalette.Green;
+                header.DefaultCellStyle.Font = UiFactory.SectionFont;
+                if (collapsed) continue;
+
+                foreach (object item in group)
                 {
-                    grid.Rows[index].Cells["Selected"].ReadOnly = true;
-                    grid.Rows[index].DefaultCellStyle.ForeColor = AppPalette.Muted;
+                    CleanupRule rule = RuleFrom(item);
+                    CleanupScanResult result = item as CleanupScanResult;
+                    string size = result == null ? "待扫描" :
+                        (rule.ScanOnly ? "仅分析 " + DisplayFormat.Bytes(result.Bytes) : DisplayFormat.Bytes(result.Bytes));
+                    string files = result == null ? "--" : result.FileCount.ToString("N0");
+                    string path = result == null
+                        ? string.Join("；", rule.PathTemplates.Select(Environment.ExpandEnvironmentVariables))
+                        : (result.Roots.Count == 0 ? "未找到" : string.Join("；", result.Roots));
+                    bool selected = result == null ? selectedRuleIds.Contains(rule.Id) : result.SelectedFiles.Count > 0;
+                    int index = grid.Rows.Add(selected, string.Empty, rule.Name, rule.Description, rule.Risk, size, files, path);
+                    grid.Rows[index].Tag = item;
+                    if (rule.ScanOnly)
+                    {
+                        grid.Rows[index].Cells["Selected"].ReadOnly = true;
+                        grid.Rows[index].DefaultCellStyle.ForeColor = AppPalette.Muted;
+                    }
                 }
             }
-            status.Text = "已加载 " + grid.Rows.Count + " 条清理规则，勾选后点击扫描。";
+            grid.ResumeLayout(true);
+        }
+
+        private static CleanupRule RuleFrom(object item)
+        {
+            var rule = item as CleanupRule;
+            if (rule != null) return rule;
+            return ((CleanupScanResult)item).Rule;
+        }
+
+        private void Grid_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0) return;
+            var header = grid.Rows[e.RowIndex].Tag as CleanupCategoryHeader;
+            if (header == null) return;
+            if (!collapsedCategories.Add(header.Category)) collapsedCategories.Remove(header.Category);
+            visibleFiles = null;
+            fileGrid.RowCount = 0;
+            RenderRuleGroups();
+            status.Text = header.Category + (collapsedCategories.Contains(header.Category) ? " 已收起。" : " 已展开。");
+        }
+
+        private void Grid_CellToolTipTextNeeded(object sender, DataGridViewCellToolTipTextNeededEventArgs e)
+        {
+            if (e.RowIndex < 0) return;
+            object item = grid.Rows[e.RowIndex].Tag;
+            if (item is CleanupCategoryHeader) return;
+            CleanupRule rule = RuleFrom(item);
+            e.ToolTipText = rule.Risk + " | " + rule.Description + Environment.NewLine +
+                string.Join(Environment.NewLine, rule.PathTemplates.Select(Environment.ExpandEnvironmentVariables));
+        }
+
+        private sealed class CleanupCategoryHeader
+        {
+            public string Category { get; private set; }
+            public CleanupCategoryHeader(string category) { Category = category; }
         }
 
         private async Task ScanAsync()
@@ -282,30 +348,19 @@ namespace ZyperWin__
                     busyOverlay.UpdateMessage(DisplayFormat.SingleLine(value, 90));
                 });
                 IList<CleanupScanResult> results = await service.ScanAsync(CleanupKind.DriveC, reporter, cancellation.Token);
-                grid.Rows.Clear();
                 foreach (CleanupScanResult result in results)
                 {
-                    int index = grid.Rows.Add(
-                        result.Rule.Recommended && !result.Rule.ScanOnly,
-                        result.Rule.Category,
-                        result.Rule.Name,
-                        result.Rule.Description,
-                        result.Rule.Risk,
-                        result.Rule.ScanOnly ? "仅分析 " + DisplayFormat.Bytes(result.Bytes) : DisplayFormat.Bytes(result.Bytes),
-                        result.FileCount.ToString("N0"),
-                        result.Roots.Count == 0 ? "未找到" : string.Join("；", result.Roots));
-                    grid.Rows[index].Tag = result;
-                    if (result.Rule.ScanOnly)
-                    {
-                        grid.Rows[index].Cells["Selected"].ReadOnly = true;
-                        grid.Rows[index].DefaultCellStyle.ForeColor = AppPalette.Muted;
-                    }
+                    if (result.Rule.ScanOnly || !selectedRuleIds.Contains(result.Rule.Id)) result.SelectedFiles.Clear();
+                    else result.SelectedFiles.UnionWith(result.Files);
                 }
-                if (grid.Rows.Count > 0)
+                cleanupItems = results.Cast<object>().ToList();
+                RenderRuleGroups();
+                DataGridViewRow firstResult = grid.Rows.Cast<DataGridViewRow>().FirstOrDefault(row => row.Tag is CleanupScanResult);
+                if (firstResult != null)
                 {
                     grid.ClearSelection();
-                    grid.Rows[0].Selected = true;
-                    grid.CurrentCell = grid.Rows[0].Cells["Name"];
+                    firstResult.Selected = true;
+                    grid.CurrentCell = firstResult.Cells["Name"];
                     ShowSelectedRuleFiles();
                 }
                 long detected = results.Sum(value => value.Bytes);
@@ -337,14 +392,10 @@ namespace ZyperWin__
 
         private async Task CleanAsync()
         {
-            var selected = new List<CleanupScanResult>();
-            foreach (DataGridViewRow row in grid.Rows)
-            {
-                bool isSelected = Convert.ToBoolean(row.Cells["Selected"].Value ?? false);
-                var result = row.Tag as CleanupScanResult;
-                if (isSelected && result != null && result.SelectedFiles.Count > 0)
-                    selected.Add(CleanupService.CreateSelection(result));
-            }
+            var selected = cleanupItems.OfType<CleanupScanResult>()
+                .Where(result => result.SelectedFiles.Count > 0)
+                .Select(CleanupService.CreateSelection)
+                .ToList();
             if (selected.Count == 0)
             {
                 MessageBox.Show("请先完成扫描并勾选需要清理的项目。", "C DiskGlow", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -365,12 +416,14 @@ namespace ZyperWin__
                 MessageBoxIcon.Warning);
             if (answer != DialogResult.Yes) return;
 
+            AppOperationScope operationScope = null;
             cancellation = new CancellationTokenSource();
             SetBusy(true, "取消清理");
             progress.Style = ProgressBarStyle.Marquee;
             busyOverlay.Start("正在清理选中项", createBackup ? "正在备份并删除已确认文件" : "正在删除已确认文件");
             try
             {
+                operationScope = AppOperationCoordinator.Begin("C盘深度清理");
                 CleanupResult result = await service.CleanAsync(
                     selected,
                     createBackup ? backupRoot : null,
@@ -391,11 +444,11 @@ namespace ZyperWin__
                       (result.Errors.Count > 8 ? "\n其余失败项请查看操作日志。" : string.Empty);
                 MessageBox.Show(details, "清理完成", MessageBoxButtons.OK,
                     result.FailedFiles == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-                foreach (DataGridViewRow row in grid.Rows)
+                foreach (CleanupScanResult scanned in cleanupItems.OfType<CleanupScanResult>())
                 {
-                    row.Cells["Selected"].Value = false;
-                    row.Cells["Size"].Value = "需重新扫描";
+                    scanned.SelectedFiles.Clear();
                 }
+                RenderRuleGroups();
             }
             catch (OperationCanceledException)
             {
@@ -417,22 +470,19 @@ namespace ZyperWin__
                 progress.Style = ProgressBarStyle.Blocks;
                 progress.Value = 0;
                 SetBusy(false, "扫描");
+                if (operationScope != null) operationScope.Dispose();
             }
         }
 
         private void SelectRecommended()
         {
-            foreach (DataGridViewRow row in grid.Rows)
+            foreach (object item in cleanupItems)
             {
-                CleanupRule rule = row.Tag as CleanupRule;
-                if (rule == null)
-                {
-                    CleanupScanResult result = row.Tag as CleanupScanResult;
-                    rule = result == null ? null : result.Rule;
-                }
+                CleanupRule rule = RuleFrom(item);
                 bool select = rule != null && rule.Recommended && !rule.ScanOnly;
-                SetRuleSelection(row, select);
+                SetItemSelection(item, select);
             }
+            RenderRuleGroups();
         }
 
         private void SelectAll()
@@ -442,16 +492,12 @@ namespace ZyperWin__
                 "确认全选",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning) != DialogResult.Yes) return;
-            foreach (DataGridViewRow row in grid.Rows)
+            foreach (object item in cleanupItems)
             {
-                CleanupRule rule = row.Tag as CleanupRule;
-                if (rule == null)
-                {
-                    CleanupScanResult result = row.Tag as CleanupScanResult;
-                    rule = result?.Rule;
-                }
-                SetRuleSelection(row, rule != null && !rule.ScanOnly);
+                CleanupRule rule = RuleFrom(item);
+                SetItemSelection(item, rule != null && !rule.ScanOnly);
             }
+            RenderRuleGroups();
         }
 
         private void SetBusy(bool busy, string scanText)
@@ -493,22 +539,26 @@ namespace ZyperWin__
 
         private void SelectNone()
         {
-            foreach (DataGridViewRow row in grid.Rows)
-            {
-                SetRuleSelection(row, false);
-            }
+            foreach (object item in cleanupItems) SetItemSelection(item, false);
+            RenderRuleGroups();
             fileGrid.Invalidate();
         }
 
         private void Grid_CellValueChanged(object sender, DataGridViewCellEventArgs e)
         {
-            if (changingSelection || e.RowIndex < 0 || grid.Columns[e.ColumnIndex].Name != "Selected") return;
+            if (changingSelection || e.RowIndex < 0 || e.ColumnIndex < 0 || grid.Columns[e.ColumnIndex].Name != "Selected") return;
             DataGridViewRow row = grid.Rows[e.RowIndex];
+            var ruleOnly = row.Tag as CleanupRule;
+            if (ruleOnly != null)
+            {
+                bool ruleSelected = Convert.ToBoolean(row.Cells["Selected"].Value ?? false);
+                if (ruleSelected) selectedRuleIds.Add(ruleOnly.Id); else selectedRuleIds.Remove(ruleOnly.Id);
+                return;
+            }
             var result = row.Tag as CleanupScanResult;
             if (result == null || result.Rule.ScanOnly) return;
             bool selected = Convert.ToBoolean(row.Cells["Selected"].Value ?? false);
-            if (selected) result.SelectedFiles.UnionWith(result.Files);
-            else result.SelectedFiles.Clear();
+            SetItemSelection(result, selected);
             if (ReferenceEquals(result, visibleFiles)) fileGrid.Invalidate();
         }
 
@@ -518,6 +568,16 @@ namespace ZyperWin__
             changingSelection = true;
             row.Cells["Selected"].Value = selected;
             changingSelection = false;
+            if (result == null) return;
+            SetItemSelection(result, selected);
+        }
+
+        private void SetItemSelection(object item, bool selected)
+        {
+            CleanupRule rule = RuleFrom(item);
+            if (rule.ScanOnly) selected = false;
+            if (selected) selectedRuleIds.Add(rule.Id); else selectedRuleIds.Remove(rule.Id);
+            var result = item as CleanupScanResult;
             if (result == null) return;
             if (selected) result.SelectedFiles.UnionWith(result.Files);
             else result.SelectedFiles.Clear();
@@ -628,11 +688,13 @@ namespace ZyperWin__
                 FileCount = 1,
                 Bytes = oneBytes
             };
+            AppOperationScope operationScope = null;
             cancellation = new CancellationTokenSource();
             SetBusy(true, "取消清理");
             busyOverlay.Start("正在清理文件", DisplayFormat.SingleLine(path, 90));
             try
             {
+                operationScope = AppOperationCoordinator.Begin("单文件清理");
                 CleanupResult result = await service.CleanAsync(new[] { one }, createBackup ? backupRoot : null, null, cancellation.Token);
                 if (result.DeletedFiles == 1)
                 {
@@ -658,6 +720,7 @@ namespace ZyperWin__
                 cancellation = null;
                 busyOverlay.Stop();
                 SetBusy(false, "扫描");
+                if (operationScope != null) operationScope.Dispose();
             }
         }
 

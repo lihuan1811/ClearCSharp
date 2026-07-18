@@ -17,8 +17,13 @@ namespace ZyperWin__
         private readonly DataGridView extensionGrid = UiFactory.Grid();
         private readonly TreemapControl treemap = new TreemapControl();
         private readonly TextBox pathBox = new TextBox();
+        private readonly ComboBox driveBox = new ComboBox();
+        private readonly Label capacityLabel = UiFactory.StatusLabel("正在读取磁盘容量...");
         private readonly Button browseButton = UiFactory.SecondaryButton("选择目录");
         private readonly Button scanButton = UiFactory.PrimaryButton("开始扫描");
+        private readonly Button driveCButton = UiFactory.SecondaryButton("C盘");
+        private readonly Button driveDButton = UiFactory.SecondaryButton("D盘");
+        private readonly Button refreshDrivesButton = UiFactory.SecondaryButton("刷新磁盘");
         private readonly Button upButton = UiFactory.SecondaryButton("上一级");
         private readonly BusyAnimationOverlay busyOverlay = new BusyAnimationOverlay();
         private readonly Label status = UiFactory.StatusLabel("选择目录后开始扫描，扫描过程可取消。");
@@ -47,14 +52,42 @@ namespace ZyperWin__
             var pathBar = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
-                Height = 52,
-                ColumnCount = 4,
-                Padding = new Padding(0, 8, 0, 6)
+                Height = 88,
+                ColumnCount = 7,
+                RowCount = 2,
+                Padding = new Padding(0, 6, 0, 4)
             };
             pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 72F));
+            pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150F));
             pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 66F));
+            pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 66F));
+            pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96F));
+            pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 104F));
+            pathBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));
+            pathBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));
+            pathBar.Controls.Add(new Label
+            {
+                Text = "选择磁盘",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = UiFactory.SectionFont,
+                ForeColor = AppPalette.Text
+            }, 0, 0);
+            driveBox.Dock = DockStyle.Fill;
+            driveBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            driveBox.Font = UiFactory.BaseFont;
+            driveBox.Margin = new Padding(0, 4, 8, 4);
+            pathBar.Controls.Add(driveBox, 1, 0);
+            capacityLabel.Dock = DockStyle.Fill;
+            capacityLabel.TextAlign = ContentAlignment.MiddleLeft;
+            pathBar.Controls.Add(capacityLabel, 2, 0);
+            driveCButton.Width = 58;
+            driveDButton.Width = 58;
+            refreshDrivesButton.Width = 88;
+            pathBar.Controls.Add(driveCButton, 3, 0);
+            pathBar.Controls.Add(driveDButton, 4, 0);
+            pathBar.Controls.Add(refreshDrivesButton, 5, 0);
             pathBar.Controls.Add(new Label
             {
                 Text = "当前目录",
@@ -62,16 +95,17 @@ namespace ZyperWin__
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font = UiFactory.SectionFont,
                 ForeColor = AppPalette.Text
-            }, 0, 0);
+            }, 0, 1);
             pathBox.Dock = DockStyle.Fill;
             pathBox.Font = UiFactory.BaseFont;
             pathBox.Text = Environment.GetEnvironmentVariable("SystemDrive") + "\\";
             pathBox.Margin = new Padding(0, 4, 8, 4);
-            pathBar.Controls.Add(pathBox, 1, 0);
+            pathBar.Controls.Add(pathBox, 1, 1);
+            pathBar.SetColumnSpan(pathBox, 4);
             browseButton.Width = 98;
             scanButton.Width = 98;
-            pathBar.Controls.Add(browseButton, 2, 0);
-            pathBar.Controls.Add(scanButton, 3, 0);
+            pathBar.Controls.Add(browseButton, 5, 1);
+            pathBar.Controls.Add(scanButton, 6, 1);
 
             ConfigureFileGrid();
             ConfigureExtensionGrid();
@@ -128,11 +162,60 @@ namespace ZyperWin__
             Controls.Add(header);
 
             browseButton.Click += BrowseButton_Click;
+            driveBox.SelectedIndexChanged += delegate { SelectDriveFromList(); };
+            driveCButton.Click += delegate { SelectDrive("C:\\"); };
+            driveDButton.Click += delegate { SelectDrive("D:\\"); };
+            refreshDrivesButton.Click += delegate { PopulateDrives(); };
             scanButton.Click += async delegate { await ScanAsync(); };
             upButton.Click += delegate { NavigateToParent(); };
             fileGrid.CellDoubleClick += FileGrid_CellDoubleClick;
             extensionGrid.CellClick += ExtensionGrid_CellClick;
             treemap.NodeSelected += Treemap_NodeSelected;
+            PopulateDrives();
+        }
+
+        private void PopulateDrives()
+        {
+            string currentRoot = null;
+            try { currentRoot = Path.GetPathRoot(pathBox.Text); } catch { }
+            driveBox.BeginUpdate();
+            driveBox.Items.Clear();
+            try
+            {
+                foreach (DriveInfo drive in DriveInfo.GetDrives()
+                    .Where(value => value.IsReady && (value.DriveType == DriveType.Fixed || value.DriveType == DriveType.Removable))
+                    .OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase))
+                    driveBox.Items.Add(new DriveItem(drive));
+            }
+            catch (Exception ex) { OperationLogger.Error("磁盘枚举", ex.Message); }
+            driveBox.EndUpdate();
+            driveDButton.Enabled = driveBox.Items.Cast<DriveItem>().Any(value => string.Equals(value.Root, "D:\\", StringComparison.OrdinalIgnoreCase));
+            DriveItem selected = driveBox.Items.Cast<DriveItem>().FirstOrDefault(value =>
+                string.Equals(value.Root, currentRoot, StringComparison.OrdinalIgnoreCase));
+            if (selected != null) driveBox.SelectedItem = selected;
+            else if (driveBox.Items.Count > 0) driveBox.SelectedIndex = 0;
+            else capacityLabel.Text = "没有可用的固定磁盘或移动磁盘";
+        }
+
+        private void SelectDrive(string root)
+        {
+            DriveItem item = driveBox.Items.Cast<DriveItem>().FirstOrDefault(value =>
+                string.Equals(value.Root, root, StringComparison.OrdinalIgnoreCase));
+            if (item == null)
+            {
+                MessageBox.Show(root + " 当前不可用。", "选择磁盘", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            driveBox.SelectedItem = item;
+        }
+
+        private void SelectDriveFromList()
+        {
+            var item = driveBox.SelectedItem as DriveItem;
+            if (item == null) return;
+            pathBox.Text = item.Root;
+            capacityLabel.Text = string.Format("总计 {0}  已用 {1}  可用 {2}", DisplayFormat.Bytes(item.TotalBytes),
+                DisplayFormat.Bytes(item.TotalBytes - item.FreeBytes), DisplayFormat.Bytes(item.FreeBytes));
         }
 
         private void ConfigureFileGrid()
@@ -225,7 +308,10 @@ namespace ZyperWin__
                     DisplayFormat.Bytes(analysis.Root.PhysicalSize),
                     DisplayFormat.Bytes(analysis.Root.Size),
                     analysis.SkippedPaths,
-                    analysis.AggregatedFiles > 0 ? "，其中 " + analysis.AggregatedFiles.ToString("N0") + " 个文件已合并显示以控制内存" : string.Empty);
+                    analysis.AggregatedFiles > 0 || analysis.AggregatedDirectories > 0
+                        ? "，其中 " + analysis.AggregatedFiles.ToString("N0") + " 个文件、" +
+                          analysis.AggregatedDirectories.ToString("N0") + " 个目录已合并显示以控制内存"
+                        : string.Empty);
                 OperationLogger.Info("文件扫描", path + "，物理占用 " + DisplayFormat.Bytes(analysis.Root.PhysicalSize) +
                     "，逻辑大小 " + DisplayFormat.Bytes(analysis.Root.Size));
             }
@@ -363,7 +449,7 @@ namespace ZyperWin__
         {
             if (e.RowIndex < 0) return;
             var node = fileGrid.Rows[e.RowIndex].Tag as DiskNode;
-            if (node != null && node.IsDirectory)
+            if (node != null && node.IsDirectory && !node.IsAggregate)
             {
                 selectedExtension = null;
                 ShowNode(node);
@@ -372,7 +458,7 @@ namespace ZyperWin__
 
         private void Treemap_NodeSelected(object sender, DiskNodeEventArgs e)
         {
-            if (e.Node == null || !e.Node.IsDirectory) return;
+            if (e.Node == null || !e.Node.IsDirectory || e.Node.IsAggregate) return;
             DiskNode original = analysis == null ? null : FindNodeByPath(analysis.Root, e.Node.FullPath);
             selectedExtension = null;
             ShowNode(original ?? e.Node);
@@ -426,6 +512,10 @@ namespace ZyperWin__
         {
             scanButton.Text = busy ? "取消扫描" : "开始扫描";
             browseButton.Enabled = !busy;
+            driveBox.Enabled = !busy;
+            driveCButton.Enabled = !busy;
+            driveDButton.Enabled = !busy && driveBox.Items.Cast<DriveItem>().Any(value => string.Equals(value.Root, "D:\\", StringComparison.OrdinalIgnoreCase));
+            refreshDrivesButton.Enabled = !busy;
             pathBox.Enabled = !busy;
             fileGrid.Enabled = !busy;
             extensionGrid.Enabled = !busy;
@@ -444,6 +534,25 @@ namespace ZyperWin__
         {
             if (disposing && cancellation != null) cancellation.Cancel();
             base.Dispose(disposing);
+        }
+
+        private sealed class DriveItem
+        {
+            public string Root { get; private set; }
+            public long TotalBytes { get; private set; }
+            public long FreeBytes { get; private set; }
+            private readonly string label;
+
+            public DriveItem(DriveInfo drive)
+            {
+                Root = drive.RootDirectory.FullName;
+                TotalBytes = drive.TotalSize;
+                FreeBytes = drive.AvailableFreeSpace;
+                string kind = drive.DriveType == DriveType.Removable ? "移动磁盘" : "本地磁盘";
+                label = Root + "  " + kind;
+            }
+
+            public override string ToString() { return label; }
         }
     }
 

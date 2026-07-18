@@ -41,6 +41,7 @@
 
   <ItemGroup>
     <Compile Include="BackupStore.cs" />
+    <Compile Include="AdvancedControlDashboard.cs" />
     <Compile Include="BusyAnimationOverlay.cs" />
     <Compile Include="CleanupDashboard.cs" />
     <Compile Include="CleanupService.cs" />
@@ -68,6 +69,7 @@
     <Compile Include="ReliableOptimizationExecutor.cs" />
     <Compile Include="RestoreDialog.cs" />
     <Compile Include="SystemOptimizationDashboard.cs" />
+    <Compile Include="SystemControlService.cs" />
     <Compile Include="UiFactory.cs" />
     <Compile Include="UninstallDashboard.cs" />
     <Compile Include="UninstallService.cs" />

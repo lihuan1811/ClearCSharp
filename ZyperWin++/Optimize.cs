@@ -19,8 +19,17 @@ namespace ZyperWin__
     {
         private string xmlFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Bin", "ZyperData.xml");
         private Dictionary<string, bool> optimizationStatus = new Dictionary<string, bool>();
+        private HashSet<string> unsupportedItems = new HashSet<string>(StringComparer.Ordinal);
         private XDocument xmlDoc;
         private CancellationTokenSource statusCancellation;
+
+        private sealed class OptimizationBatchResult
+        {
+            public int Succeeded { get; set; }
+            public int Skipped { get; set; }
+            public List<string> Errors { get; } = new List<string>();
+            public HashSet<string> SucceededTags { get; } = new HashSet<string>(StringComparer.Ordinal);
+        }
         [DllImport("user32.dll")]
         private static extern IntPtr GetDesktopWindow();
 
@@ -267,7 +276,7 @@ namespace ZyperWin__
                 category.Checked = true;
                 foreach (var item in category.Sub)
                 {
-                    item.Checked = true;
+                    item.Checked = item.Tag == null || !unsupportedItems.Contains(item.Tag.ToString());
                 }
             }
             tree1.Invalidate();
@@ -597,6 +606,7 @@ namespace ZyperWin__
                     // 检查当前项的tag是否在指定列表中
                     if (item.Tag != null && tagNames.Contains(item.Tag.ToString()))
                     {
+                        if (unsupportedItems.Contains(item.Tag.ToString())) continue;
                         item.Checked = true;
                         category.Checked = true; // 确保父分类也被选中（可选）
                     }
@@ -1366,6 +1376,7 @@ namespace ZyperWin__
             int selectedCount = 0;
             int alreadyOptimizedCount = 0;
             bool actuallyOptimizedExplorerItem = false;
+            var explorerItemsToOptimize = new HashSet<string>(StringComparer.Ordinal);
 
             // 检查是否包含需要重启资源管理器的项目
             foreach (var category in tree1.Items)
@@ -1389,6 +1400,7 @@ namespace ZyperWin__
                         if (isExplorerCategory && !isAlreadyOptimized)
                         {
                             actuallyOptimizedExplorerItem = true;
+                            explorerItemsToOptimize.Add(itemTag);
                         }
 
                         // 检查是否已经优化
@@ -1426,19 +1438,22 @@ namespace ZyperWin__
 
             if (result == DialogResult.Yes)
             {
+                AppOperationScope operationScope = null;
                 try
                 {
+                    operationScope = AppOperationCoordinator.Begin("ZyperWin++ 系统优化");
                     // 冻结所有控件
                     SetControlsEnabled(false);
 
                     // 异步执行优化
-                    await PerformOptimizationWithProgress(false);
+                    OptimizationBatchResult batch = await PerformOptimizationWithProgress(false);
 
                     // 关键修改：优化完成后立即刷新检测状态
                     await RefreshOptimizationStatusAsync();
 
                     // 修正：只有真正优化了外观项目才重启
-                    if (actuallyOptimizedExplorerItem)
+                    bool restartExplorer = batch.SucceededTags.Overlaps(explorerItemsToOptimize);
+                    if (restartExplorer)
                     {
                         await RestartExplorerAsync();
                     }
@@ -1446,22 +1461,20 @@ namespace ZyperWin__
                     // 保存配置到文件
                     SaveConfigToConfigFolder();
 
-                    string completionMessage = $"优化完成！\n共优化了 {selectedCount - alreadyOptimizedCount} 个项目";
+                    string completionMessage = $"优化处理完成：成功 {batch.Succeeded} 项，跳过 {batch.Skipped + alreadyOptimizedCount} 项，失败 {batch.Errors.Count} 项。";
 
-                    if (alreadyOptimizedCount > 0)
-                    {
-                        completionMessage += $"\n跳过 {alreadyOptimizedCount} 个已优化项目";
-                    }
-
-                    if (actuallyOptimizedExplorerItem)
+                    if (restartExplorer)
                     {
                         completionMessage += "\n资源管理器已重启";
                     }
 
                     completionMessage += "\n已优化的项目已显示(已优化)符号";
 
-                    OperationLogger.Info("系统优化", string.Format("优化 {0} 个项目，跳过 {1} 个", selectedCount - alreadyOptimizedCount, alreadyOptimizedCount));
-                    MessageBox.Show(completionMessage, "C DiskGlow", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    if (batch.Errors.Count > 0)
+                        completionMessage += "\n\n失败详情：\n" + string.Join("\n", batch.Errors.Take(10));
+                    OperationLogger.Info("系统优化", completionMessage);
+                    MessageBox.Show(completionMessage, "C DiskGlow", MessageBoxButtons.OK,
+                        batch.Errors.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
                 }
                 catch (Exception ex)
                 {
@@ -1474,6 +1487,7 @@ namespace ZyperWin__
                 {
                     // 恢复所有控件
                     SetControlsEnabled(true);
+                    if (operationScope != null) operationScope.Dispose();
                 }
             }
         }
@@ -1484,6 +1498,7 @@ namespace ZyperWin__
             bool hasSelectedItems = false;
             int selectedCount = 0;
             bool actuallyRestoredExplorerItem = false;
+            var explorerItemsToRestore = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var category in tree1.Items)
             {
@@ -1502,6 +1517,7 @@ namespace ZyperWin__
                         if (isExplorerCategory)
                         {
                             actuallyRestoredExplorerItem = true;
+                            if (item.Tag != null) explorerItemsToRestore.Add(item.Tag.ToString());
                         }
                     }
                 }
@@ -1526,32 +1542,37 @@ namespace ZyperWin__
 
             if (result == DialogResult.Yes)
             {
+                AppOperationScope operationScope = null;
                 try
                 {
+                    operationScope = AppOperationCoordinator.Begin("ZyperWin++ 系统优化还原");
                     // 冻结所有控件
                     SetControlsEnabled(false);
 
                     // 异步执行还原
-                    await PerformOptimizationWithProgress(true);
+                    OptimizationBatchResult batch = await PerformOptimizationWithProgress(true);
 
                     // 关键修改：还原完成后立即刷新检测状态
                     await RefreshOptimizationStatusAsync();
                     // 修正：只有还原了外观项目才重启
-                    if (actuallyRestoredExplorerItem)
+                    bool restartExplorer = batch.SucceededTags.Overlaps(explorerItemsToRestore);
+                    if (restartExplorer)
                     {
                         await RestartExplorerAsync();
                     }
 
-                    string completionMessage = $"还原完成！\n共还原了 {selectedCount} 个项目\n状态已更新";
+                    string completionMessage = $"还原处理完成：成功 {batch.Succeeded} 项，跳过 {batch.Skipped} 项，失败 {batch.Errors.Count} 项。\n状态已更新";
 
-                    if (actuallyRestoredExplorerItem)
+                    if (restartExplorer)
                     {
                         completionMessage += "\n资源管理器已重启";
                     }
 
-                    OperationLogger.Info("系统优化", "还原 " + selectedCount + " 个项目");
+                    if (batch.Errors.Count > 0)
+                        completionMessage += "\n\n失败详情：\n" + string.Join("\n", batch.Errors.Take(10));
+                    OperationLogger.Info("系统优化", completionMessage);
                     MessageBox.Show(completionMessage,
-                        "C DiskGlow", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        "C DiskGlow", MessageBoxButtons.OK, batch.Errors.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
                 }
                 catch (Exception ex)
                 {
@@ -1564,6 +1585,7 @@ namespace ZyperWin__
                 {
                     // 恢复所有控件
                     SetControlsEnabled(true);
+                    if (operationScope != null) operationScope.Dispose();
                 }
             }
         }
@@ -1610,13 +1632,6 @@ namespace ZyperWin__
             // 冻结/恢复树形控件
             tree1.Enabled = enabled;
             tree2.Enabled = enabled;
-
-            // 冻结/恢复主窗口菜单
-            var mainWindow = this.ParentForm as MainWindow;
-            if (mainWindow != null)
-            {
-                mainWindow.SetMenuEnabled(enabled);
-            }
 
             // 强制刷新界面
             this.Refresh();
@@ -2829,20 +2844,30 @@ namespace ZyperWin__
 
             label2.Text = "正在后台检测当前优化状态...";
             Dictionary<string, bool> detected;
+            Dictionary<string, string> unsupported;
             try
             {
-                detected = await Task.Run(() =>
+                var probe = await Task.Run(() =>
                 {
                     var values = new Dictionary<string, bool>(StringComparer.Ordinal);
+                    var unavailable = new Dictionary<string, string>(StringComparer.Ordinal);
                     foreach (string itemTag in itemTags)
                     {
                         token.ThrowIfCancellationRequested();
                         XElement itemElement = xmlDoc.Descendants("Item")
                             .FirstOrDefault(element => element.Attribute("name")?.Value == itemTag);
-                        values[itemTag] = ReliableOptimizationExecutor.VerifyItem(itemElement, itemTag, out _);
+                        string reason;
+                        if (!ReliableOptimizationExecutor.IsSupported(itemElement, itemTag, out reason))
+                        {
+                            unavailable[itemTag] = reason;
+                            values[itemTag] = false;
+                        }
+                        else values[itemTag] = ReliableOptimizationExecutor.VerifyItem(itemElement, itemTag, out _);
                     }
-                    return values;
+                    return Tuple.Create(values, unavailable);
                 }, token);
+                detected = probe.Item1;
+                unsupported = probe.Item2;
             }
             catch (OperationCanceledException)
             {
@@ -2851,6 +2876,7 @@ namespace ZyperWin__
 
             if (IsDisposed || token.IsCancellationRequested) return;
             optimizationStatus = detected;
+            unsupportedItems = new HashSet<string>(unsupported.Keys, StringComparer.Ordinal);
             foreach (var category in tree1.Items)
             {
                 foreach (var item in category.Sub)
@@ -2859,7 +2885,12 @@ namespace ZyperWin__
                     string itemTag = item.Tag.ToString();
                     bool isOptimized = detected.TryGetValue(itemTag, out bool value) && value;
                     string originalText = GetOriginalText(item.Text);
-                    if (isOptimized)
+                    if (unsupported.TryGetValue(itemTag, out string unsupportedReason))
+                    {
+                        item.Text = "(不支持) " + originalText;
+                        item.Checked = false;
+                    }
+                    else if (isOptimized)
                     {
                         item.Text = "(已优化) " + originalText;
                         item.Checked = true;
@@ -2874,7 +2905,9 @@ namespace ZyperWin__
 
             UpdateCategoryCheckStates();
             ExportSelectedToTree2();
-            label2.Text = "优化状态检测完成。";
+            label2.Text = unsupported.Count == 0
+                ? "优化状态检测完成。"
+                : "优化状态检测完成；当前系统不支持 " + unsupported.Count + " 项，已自动禁用。";
         }
 
         // 增强的注册表值检查
@@ -2957,6 +2990,10 @@ namespace ZyperWin__
 
         private string GetOriginalText(string currentText)
         {
+            if (currentText.StartsWith("(不支持) "))
+            {
+                return currentText.Substring("(不支持) ".Length);
+            }
             if (currentText.StartsWith("(已优化) "))
             {
                 return currentText.Substring("(已优化) ".Length);
@@ -3083,7 +3120,7 @@ namespace ZyperWin__
         }
 
         // 优化或还原完成后刷新状态
-        private async Task PerformOptimizationWithProgress(bool isRestore)
+        private async Task<OptimizationBatchResult> PerformOptimizationWithProgress(bool isRestore)
         {
             Console.WriteLine($"开始执行{(isRestore ? "还原" : "优化")}操作...");
 
@@ -3126,7 +3163,7 @@ namespace ZyperWin__
                 {
                     MessageBox.Show("没有找到需要还原的项目。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
-                return;
+                return new OptimizationBatchResult();
             }
 
             if (isRestore)
@@ -3137,53 +3174,62 @@ namespace ZyperWin__
                     .ToList();
             }
 
-            try
+            var batch = new OptimizationBatchResult();
+            int processedCount = 0;
+            for (int i = 0; i < selectedItems.Count; i++)
             {
-                // ... 进度显示代码 ...
+                var (_, itemTag, _) = selectedItems[i];
+                processedCount++;
+                int progressPercentage = (int)((double)processedCount / selectedItems.Count * 100);
+                label2.Text = $"{(isRestore ? "还原" : "优化")}中... {processedCount}/{selectedItems.Count} ({progressPercentage}%)";
+                label2.Refresh();
 
-                int processedCount = 0;
-
-                // 使用异步方式逐步执行
-                for (int i = 0; i < selectedItems.Count; i++)
+                XElement configElement = xmlDoc.Descendants("Item")
+                    .FirstOrDefault(e => e.Attribute("name")?.Value == itemTag);
+                if (configElement == null)
                 {
-                    var (categoryName, itemTag, alreadyOptimized) = selectedItems[i];
-                    processedCount++;
-
-                    int progressPercentage = (int)((double)processedCount / selectedItems.Count * 100);
-                    label2.Text = $"{(isRestore ? "还原" : "优化")}中... {processedCount}/{selectedItems.Count} ({progressPercentage}%)";
-                    label2.Refresh();
-
-                    Console.WriteLine($"处理项目: {itemTag} ({processedCount}/{selectedItems.Count})");
-
-                    // 查找XML配置
-                    var configElement = xmlDoc.Descendants("Item")
-                        .FirstOrDefault(e => e.Attribute("name")?.Value == itemTag);
-
-                    if (configElement != null)
-                    {
-                        Console.WriteLine($"找到XML配置，开始{(isRestore ? "还原" : "优化")}...");
-                        OptimizationExecutionResult result = await Task.Run(() => isRestore
-                            ? ReliableOptimizationExecutor.RestoreLatest(itemTag)
-                            : ReliableOptimizationExecutor.Apply(configElement, itemTag));
-                        if (!result.Success) throw new InvalidOperationException(itemTag + "：" + result.Message);
-                        Console.WriteLine($"项目 {itemTag} 处理完成");
-                    }
-                    else
-                    {
-                        throw new InvalidDataException("未找到系统优化规则：" + itemTag);
-                    }
-
-                    // 添加延迟，让用户能看到进度变化
-                    await Task.Delay(100);
+                    batch.Errors.Add(itemTag + "：未找到系统优化规则。");
+                    continue;
                 }
 
-                // ... 完成处理 ...
+                if (!isRestore)
+                {
+                    string unsupportedReason;
+                    if (!ReliableOptimizationExecutor.IsSupported(configElement, itemTag, out unsupportedReason))
+                    {
+                        batch.Skipped++;
+                        OperationLogger.Info("系统优化", itemTag + " 已跳过：" + unsupportedReason);
+                        continue;
+                    }
+                }
+
+                OptimizationExecutionResult result;
+                try
+                {
+                    result = await Task.Run(() => isRestore
+                        ? ReliableOptimizationExecutor.RestoreLatest(itemTag)
+                        : ReliableOptimizationExecutor.Apply(configElement, itemTag));
+                }
+                catch (Exception ex)
+                {
+                    batch.Errors.Add(itemTag + "：" + ex.Message);
+                    OperationLogger.Error("系统优化", itemTag + "：" + ex.Message);
+                    continue;
+                }
+
+                if (result.Success)
+                {
+                    batch.Succeeded++;
+                    batch.SucceededTags.Add(itemTag);
+                }
+                else
+                {
+                    batch.Errors.Add(itemTag + "：" + result.Message);
+                    OperationLogger.Error("系统优化", itemTag + "：" + result.Message);
+                }
+                await Task.Delay(60);
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"操作过程中出现错误: {ex.Message}");
-                throw;
-            }
+            return batch;
         }
 
         private void button9_Click(object sender, EventArgs e)

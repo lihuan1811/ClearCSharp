@@ -192,6 +192,7 @@ namespace ZyperWin__
             if (MessageBox.Show(warning + "\n\n是否继续？", hasDeep ? "深度修复确认" : "确认系统修复",
                 MessageBoxButtons.YesNo, hasDeep ? MessageBoxIcon.Warning : MessageBoxIcon.Question) != DialogResult.Yes) return;
 
+            AppOperationScope operationScope = null;
             cancellation = new CancellationTokenSource();
             SetBusy(true);
             progress.Style = ProgressBarStyle.Continuous;
@@ -204,6 +205,7 @@ namespace ZyperWin__
             var failures = new List<string>();
             try
             {
+                operationScope = AppOperationCoordinator.Begin(hasDeep ? "CMD 深度系统修复" : "CMD 系统修复");
                 for (int index = 0; index < selected.Count; index++)
                 {
                     RepairAction action = selected[index];
@@ -254,6 +256,7 @@ namespace ZyperWin__
             {
                 cancellation.Dispose();
                 cancellation = null;
+                if (operationScope != null) operationScope.Dispose();
                 if (!IsDisposed) SetBusy(false);
             }
         }

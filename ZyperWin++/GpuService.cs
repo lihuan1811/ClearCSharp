@@ -91,6 +91,11 @@ namespace ZyperWin__
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int AdlxTerminateDelegate();
 
+        public static int JournalCount
+        {
+            get { return ReadJournal().Select(value => value.OperationId).Distinct(StringComparer.Ordinal).Count(); }
+        }
+
         public Task<IList<GpuInfo>> DetectAsync(CancellationToken cancellationToken)
         {
             return Task.Run<IList<GpuInfo>>(() =>
@@ -106,12 +111,37 @@ namespace ZyperWin__
 
         public Task<FileOperationSummary> ApplyAsync(IEnumerable<GpuOptimizationOperation> operations, CancellationToken cancellationToken)
         {
-            return Task.Run(() => Apply(operations, cancellationToken), cancellationToken);
+            return ApplyAsync(operations, null, cancellationToken);
+        }
+
+        public Task<FileOperationSummary> ApplyAsync(
+            IEnumerable<GpuOptimizationOperation> operations,
+            string confirmedBackupRoot,
+            CancellationToken cancellationToken)
+        {
+            return Task.Run(() => Apply(operations, confirmedBackupRoot, cancellationToken), cancellationToken);
         }
 
         public Task<FileOperationSummary> RestoreAsync(IEnumerable<GpuOptimizationOperation> operations, CancellationToken cancellationToken)
         {
             return Task.Run(() => Restore(operations, cancellationToken), cancellationToken);
+        }
+
+        public Task<FileOperationSummary> RestoreAllAsync(CancellationToken cancellationToken)
+        {
+            return Task.Run(() =>
+            {
+                IList<GpuOptimizationOperation> operations = ReadJournal()
+                    .Select(value => value.OperationId)
+                    .Distinct(StringComparer.Ordinal)
+                    .Select(value => new GpuOptimizationOperation
+                    {
+                        Id = value,
+                        Name = OperationName(value),
+                        CanRestore = true
+                    }).ToList();
+                return Restore(operations, cancellationToken);
+            }, cancellationToken);
         }
 
         private static List<GpuInfo> ReadWmi(CancellationToken cancellationToken)
@@ -391,14 +421,21 @@ namespace ZyperWin__
             }
         }
 
-        private static FileOperationSummary Apply(IEnumerable<GpuOptimizationOperation> operations, CancellationToken cancellationToken)
+        private static FileOperationSummary Apply(
+            IEnumerable<GpuOptimizationOperation> operations,
+            string confirmedBackupRoot,
+            CancellationToken cancellationToken)
         {
             var result = new FileOperationSummary();
-            foreach (GpuOptimizationOperation operation in (operations ?? Enumerable.Empty<GpuOptimizationOperation>()).Where(value => value.CanApply))
+            foreach (GpuOptimizationOperation operation in (operations ?? Enumerable.Empty<GpuOptimizationOperation>())
+                .Where(value => value.CanApply)
+                .GroupBy(value => value.Id, StringComparer.Ordinal)
+                .Select(value => value.First()))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (operation.Id == "power-high-performance") ApplyPowerPlan(operation, result, cancellationToken);
-                else if (operation.Id.StartsWith("shader-cache-", StringComparison.Ordinal)) ApplyShaderCache(operation, result, cancellationToken);
+                else if (operation.Id.StartsWith("shader-cache-", StringComparison.Ordinal))
+                    ApplyShaderCache(operation, confirmedBackupRoot, result, cancellationToken);
             }
             return result;
         }
@@ -431,12 +468,21 @@ namespace ZyperWin__
             OperationLogger.Info("显卡优化", "切换高性能电源计划，原计划 " + previousGuid);
         }
 
-        private static void ApplyShaderCache(GpuOptimizationOperation operation, FileOperationSummary result, CancellationToken cancellationToken)
+        private static void ApplyShaderCache(
+            GpuOptimizationOperation operation,
+            string confirmedBackupRoot,
+            FileOperationSummary result,
+            CancellationToken cancellationToken)
         {
             GpuVendor vendor;
             if (!Enum.TryParse(operation.Id.Substring("shader-cache-".Length), true, out vendor))
             {
                 result.Errors.Add("未知显卡缓存操作：" + operation.Id);
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(confirmedBackupRoot))
+            {
+                result.Errors.Add(operation.Name + "：确认的非 C 盘备份位置不可用，未删除缓存。");
                 return;
             }
             foreach (string file in ShaderCachePaths(vendor).SelectMany(EnumerateFiles).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -446,7 +492,7 @@ namespace ZyperWin__
                 {
                     BackupRecord backup;
                     string error;
-                    if (!BackupStore.TryBackup(file, out backup, out error) || backup == null)
+                    if (!BackupStore.TryBackup(file, confirmedBackupRoot, out backup, out error) || backup == null)
                     {
                         result.Errors.Add(error ?? ("备份失败：" + file));
                         continue;
@@ -475,7 +521,10 @@ namespace ZyperWin__
         {
             var result = new FileOperationSummary();
             IList<GpuOptimizationJournalRecord> journal = ReadJournal();
-            foreach (GpuOptimizationOperation operation in (operations ?? Enumerable.Empty<GpuOptimizationOperation>()).Where(value => value.CanRestore))
+            foreach (GpuOptimizationOperation operation in (operations ?? Enumerable.Empty<GpuOptimizationOperation>())
+                .Where(value => value.CanRestore)
+                .GroupBy(value => value.Id, StringComparer.Ordinal)
+                .Select(value => value.First()))
             {
                 IList<GpuOptimizationJournalRecord> records = journal.Where(record => record.OperationId == operation.Id).ToList();
                 var restored = new List<GpuOptimizationJournalRecord>();
@@ -560,10 +609,14 @@ namespace ZyperWin__
             {
                 var result = new List<GpuOptimizationJournalRecord>();
                 if (!File.Exists(JournalPath)) return result;
-                foreach (string line in File.ReadAllLines(JournalPath, Encoding.UTF8))
+                string[] lines = File.ReadAllLines(JournalPath, Encoding.UTF8);
+                for (int index = 0; index < lines.Length; index++)
                 {
+                    string line = lines[index];
+                    if (string.IsNullOrWhiteSpace(line)) continue;
                     string[] fields = line.Split('\t');
-                    if (fields.Length != 4) continue;
+                    if (fields.Length != 4)
+                        throw new InvalidDataException("显卡优化还原记录第 " + (index + 1) + " 行格式无效。");
                     try
                     {
                         result.Add(new GpuOptimizationJournalRecord
@@ -574,7 +627,10 @@ namespace ZyperWin__
                             Value = Decode(fields[3])
                         });
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidDataException("显卡优化还原记录第 " + (index + 1) + " 行无法解析。", ex);
+                    }
                 }
                 return result;
             }
@@ -599,8 +655,23 @@ namespace ZyperWin__
             lock (JournalSync)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(JournalPath));
-                File.WriteAllLines(JournalPath, records.Select(record => string.Join("\t", record.CreatedAt.ToString("o"),
-                    record.OperationId, Encode(record.Key), Encode(record.Value))).ToArray(), new UTF8Encoding(false));
+                string temporary = JournalPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    File.WriteAllLines(temporary, records.Select(record => string.Join("\t", record.CreatedAt.ToString("o"),
+                        record.OperationId, Encode(record.Key), Encode(record.Value))).ToArray(), new UTF8Encoding(false));
+                    FileSystemTools.ReplaceFile(temporary, JournalPath);
+                }
+                finally
+                {
+                    try
+                    {
+                        if (File.Exists(temporary) && File.Exists(JournalPath)) File.Delete(temporary);
+                        else if (File.Exists(temporary))
+                            OperationLogger.Error("显卡优化", "日志替换失败，恢复副本已保留：" + temporary);
+                    }
+                    catch { }
+                }
             }
         }
 
@@ -628,6 +699,13 @@ namespace ZyperWin__
                 case GpuVendor.Intel: return "Intel";
                 default: return "未知厂商";
             }
+        }
+
+        private static string OperationName(string operationId)
+        {
+            if (operationId == "power-high-performance") return "高性能电源计划";
+            if (operationId.StartsWith("shader-cache-", StringComparison.Ordinal)) return "显卡着色器缓存清理";
+            return operationId;
         }
 
         private static GpuVendor DetectVendor(string name)

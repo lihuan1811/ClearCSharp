@@ -241,10 +241,19 @@ namespace ZyperWin__
         {
             IList<GpuOptimizationOperation> operations = SelectedOperations(value => value.CanApply);
             if (operations.Count == 0) return;
+            string backupRoot = null;
+            if (operations.Any(value => value.Id.StartsWith("shader-cache-", StringComparison.Ordinal)) &&
+                !BackupStore.TryGetSpaceReleasingRoot(out backupRoot))
+            {
+                MessageBox.Show("着色器缓存清理需要先备份到非 C 盘。当前没有可用的其它磁盘，未执行任何操作。",
+                    "无法安全清理缓存", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             string names = string.Join("、", operations.Select(value => value.Name));
-            if (MessageBox.Show("将应用：" + names + "\n\n每项操作都会写入日志和还原记录。是否继续？",
+            string backupNotice = string.IsNullOrWhiteSpace(backupRoot) ? string.Empty : "\n备份位置：" + backupRoot;
+            if (MessageBox.Show("将应用：" + names + backupNotice + "\n\n每项操作都会写入日志和还原记录。是否继续？",
                 "确认显卡优化", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-            await RunOperationsAsync("应用显卡优化", operations, false);
+            await RunOperationsAsync("应用显卡优化", operations, false, backupRoot);
         }
 
         private async Task RestoreSelectedAsync()
@@ -253,20 +262,26 @@ namespace ZyperWin__
             if (operations.Count == 0) return;
             if (MessageBox.Show("将按操作记录还原：" + string.Join("、", operations.Select(value => value.Name)) + "\n\n是否继续？",
                 "确认还原显卡优化", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            await RunOperationsAsync("还原显卡优化", operations, true);
+            await RunOperationsAsync("还原显卡优化", operations, true, null);
         }
 
-        private async Task RunOperationsAsync(string title, IList<GpuOptimizationOperation> operations, bool restore)
+        private async Task RunOperationsAsync(
+            string title,
+            IList<GpuOptimizationOperation> operations,
+            bool restore,
+            string confirmedBackupRoot)
         {
+            AppOperationScope operationScope = null;
             var source = new CancellationTokenSource();
             cancellation = source;
             SetBusy(true);
             detail.Text = title + "正在执行...";
             try
             {
+                operationScope = AppOperationCoordinator.Begin(title);
                 FileOperationSummary result = restore
                     ? await service.RestoreAsync(operations, source.Token)
-                    : await service.ApplyAsync(operations, source.Token);
+                    : await service.ApplyAsync(operations, confirmedBackupRoot, source.Token);
                 MessageBox.Show(result.Message, title, MessageBoxButtons.OK,
                     result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
@@ -280,6 +295,7 @@ namespace ZyperWin__
             {
                 cancellation = null;
                 source.Dispose();
+                if (operationScope != null) operationScope.Dispose();
                 if (!IsDisposed)
                 {
                     SetBusy(false);

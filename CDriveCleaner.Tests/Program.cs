@@ -27,14 +27,20 @@ namespace CDriveCleaner.Tests
             Run("Final navigation contract", TestFinalNavigation);
             Run("Disk analysis", TestDiskAnalysis);
             Run("Disk analysis memory bound", TestDiskAnalysisMemoryBound);
+            Run("Disk directory memory bound", TestDiskDirectoryMemoryBound);
             Run("Managed file classification", TestManagedFiles);
             Run("Overwrite delete disclosure", TestOverwriteDelete);
+            Run("Confirmed backup requirement", TestConfirmedBackupRequirement);
             Run("Backup roots and restore", TestBackupRootsAndRestore);
             Run("Uninstall residual identity safety", TestUninstallResidualIdentity);
             Run("Migration catalog contract", TestMigrationCatalog);
+            Run("Migration recorded source", TestMigrationRecordedSource);
             Run("GPU safe operation parsing", TestGpuSafetyParsing);
             Run("Zyper optimization data", TestOptimizationData);
+            Run("Optimization compatibility preflight", TestOptimizationCompatibilityPreflight);
             Run("Optimization snapshot round trip", TestOptimizationSnapshotRoundTrip);
+            Run("Global operation coordinator", TestOperationCoordinator);
+            Run("Atomic state replacement", TestAtomicStateReplacement);
 
             Console.WriteLine(failures == 0
                 ? "All C DiskGlow tests passed."
@@ -270,6 +276,23 @@ namespace CDriveCleaner.Tests
             finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         }
 
+        private static void TestConfirmedBackupRequirement()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "CDiskGlowRequiredBackup_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string file = Path.Combine(root, "keep.txt");
+            try
+            {
+                File.WriteAllText(file, "keep");
+                FileOperationSummary result = new ManagedFileService()
+                    .DeleteAsync(new[] { file }, null, true, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                Assert(!result.Success && result.Errors.Count > 0, "required backup without a confirmed root must fail");
+                Assert(File.Exists(file), "file was deleted after the confirmed backup destination became unavailable");
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
         private static void TestBackupRootsAndRestore()
         {
             string root = Path.Combine(Path.GetTempPath(), "CDiskGlowBackupRoot_" + Guid.NewGuid().ToString("N"));
@@ -351,6 +374,26 @@ namespace CDriveCleaner.Tests
                 "Tencent Files migration location is missing");
         }
 
+        private static void TestMigrationRecordedSource()
+        {
+            string original = @"C:\Users\Test\Desktop";
+            var records = new[]
+            {
+                new MigrationRecord
+                {
+                    Key = "desktop",
+                    LocationKey = "primary",
+                    SourcePath = original,
+                    TargetPath = @"D:\CDiskGlow\Desktop",
+                    CreatedAt = DateTime.UtcNow
+                }
+            };
+            MigrationFolder desktop = MigrationService.CatalogForRecords(records)
+                .Single(value => value.Key == "desktop");
+            Assert(desktop.SourcePath == original && desktop.Locations.Single().SourcePath == original,
+                "migrated known folder must continue using the journaled C-drive source after registry redirection");
+        }
+
         private static void TestGpuSafetyParsing()
         {
             string guid = GpuService.ParsePowerSchemeGuid("Power Scheme GUID: 8C5E7FDA-E8BF-4A96-9A85-A6E23A8C635C  (High performance)");
@@ -417,6 +460,28 @@ namespace CDriveCleaner.Tests
             }
         }
 
+        private static void TestDiskDirectoryMemoryBound()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "CDiskGlowDirectoryBound_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                for (int index = 0; index < 12; index++)
+                {
+                    string directory = Path.Combine(root, "directory-" + index);
+                    Directory.CreateDirectory(directory);
+                    File.WriteAllBytes(Path.Combine(directory, "file.bin"), new byte[index + 1]);
+                }
+                DiskAnalysisResult result = new DiskAnalysisService(100, 2)
+                    .ScanAsync(root, null, CancellationToken.None).GetAwaiter().GetResult();
+                Assert(result.Root.FileCount == 12 && result.Root.Size == 78, "directory aggregation lost scan totals");
+                Assert(result.AggregatedDirectories == 11, "directory node limit did not aggregate excess directories");
+                Assert(result.Root.Children.Count <= 2 && result.Root.Children.Any(value => value.IsAggregate && value.IsDirectory),
+                    "bounded directory scan retained an unbounded child tree");
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
         private static void TestOptimizationData()
         {
             using Stream stream = typeof(CleanupCatalog).Assembly.GetManifestResourceStream("CDiskGlow.Embedded.ZyperData.xml");
@@ -441,6 +506,50 @@ namespace CDriveCleaner.Tests
             Assert(contacts.Element("Optimize").Elements().All(command =>
                 ((string)command.Attribute("Key") ?? string.Empty).EndsWith(@"ConsentStore\contacts", StringComparison.OrdinalIgnoreCase)),
                 "contacts privacy rule writes to a different key than it checks");
+        }
+
+        private static void TestOptimizationCompatibilityPreflight()
+        {
+            string missingService = "CDiskGlowMissing_" + Guid.NewGuid().ToString("N");
+            XElement item = XElement.Parse("<Item><Optimize><SetServiceStart Name=\"" + missingService +
+                "\" Type=\"4\" /></Optimize><Restore /></Item>");
+            string reason;
+            Assert(!ReliableOptimizationExecutor.IsSupported(item, "missing-service", out reason),
+                "a rule targeting a missing Windows service must not be reported as supported");
+            Assert(reason.IndexOf(missingService, StringComparison.OrdinalIgnoreCase) >= 0,
+                "unsupported service reason must identify the missing service");
+        }
+
+        private static void TestOperationCoordinator()
+        {
+            Assert(!AppOperationCoordinator.IsBusy, "operation coordinator leaked a previous operation");
+            using (AppOperationScope scope = AppOperationCoordinator.Begin("test-operation"))
+            {
+                Assert(AppOperationCoordinator.IsBusy && AppOperationCoordinator.ActiveDescription == "test-operation",
+                    "operation coordinator did not publish the active operation");
+                bool rejected = false;
+                try { AppOperationCoordinator.Begin("second-operation"); }
+                catch (InvalidOperationException) { rejected = true; }
+                Assert(rejected, "operation coordinator allowed two destructive operations concurrently");
+            }
+            Assert(!AppOperationCoordinator.IsBusy, "operation coordinator did not release its scope");
+        }
+
+        private static void TestAtomicStateReplacement()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "CDiskGlowAtomic_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string destination = Path.Combine(root, "journal.txt");
+            string temporary = Path.Combine(root, "journal.tmp");
+            try
+            {
+                File.WriteAllText(destination, "old");
+                File.WriteAllText(temporary, "new");
+                FileSystemTools.ReplaceFile(temporary, destination);
+                Assert(File.ReadAllText(destination) == "new", "atomic state replacement did not promote the new journal");
+                Assert(!File.Exists(temporary), "atomic state replacement left the temporary file active");
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         }
 
         private static void TestOptimizationSnapshotRoundTrip()

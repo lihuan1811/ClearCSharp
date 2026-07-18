@@ -88,7 +88,16 @@ namespace ZyperWin__
 
         public Task<FileOperationSummary> DeleteAsync(IEnumerable<string> paths, CancellationToken cancellationToken)
         {
-            return Task.Run(() => Delete(paths, cancellationToken), cancellationToken);
+            return Task.Run(() => Delete(paths, null, false, cancellationToken), cancellationToken);
+        }
+
+        public Task<FileOperationSummary> DeleteAsync(
+            IEnumerable<string> paths,
+            string confirmedBackupRoot,
+            bool requireBackup,
+            CancellationToken cancellationToken)
+        {
+            return Task.Run(() => Delete(paths, confirmedBackupRoot, requireBackup, cancellationToken), cancellationToken);
         }
 
         public Task<FileOperationSummary> ShredAsync(IEnumerable<string> paths, CancellationToken cancellationToken)
@@ -294,11 +303,20 @@ namespace ZyperWin__
             return result;
         }
 
-        private static FileOperationSummary Delete(IEnumerable<string> paths, CancellationToken cancellationToken)
+        private static FileOperationSummary Delete(
+            IEnumerable<string> paths,
+            string confirmedBackupRoot,
+            bool requireBackup,
+            CancellationToken cancellationToken)
         {
             var result = new FileOperationSummary();
-            string backupRoot;
-            bool createBackup = BackupStore.TryGetSpaceReleasingRoot(out backupRoot);
+            string backupRoot = string.IsNullOrWhiteSpace(confirmedBackupRoot) ? null : Path.GetFullPath(confirmedBackupRoot);
+            bool createBackup = backupRoot != null;
+            if (requireBackup && !createBackup)
+            {
+                result.Errors.Add("确认的备份磁盘不可用，未删除任何文件。");
+                return result;
+            }
             if (createBackup)
                 BackupStore.Prune(5000, 1024L * 1024L * 1024L, backupRoot);
             else
@@ -350,7 +368,6 @@ namespace ZyperWin__
                                 long remaining = info.Length;
                                 while (remaining > 0)
                                 {
-                                    cancellationToken.ThrowIfCancellationRequested();
                                     int count = (int)Math.Min(buffer.Length, remaining);
                                     if (pass == 0) random.GetBytes(buffer); else Array.Clear(buffer, 0, buffer.Length);
                                     stream.Write(buffer, 0, count);
@@ -380,29 +397,45 @@ namespace ZyperWin__
                 cancellationToken.ThrowIfCancellationRequested();
                 string destination = Path.Combine(targetDirectory, Path.GetFileName(source));
                 string shortcut = source + ".lnk";
+                bool moved = false;
                 try
                 {
                     if (!File.Exists(source)) throw new FileNotFoundException("源文件不存在。", source);
                     if (File.Exists(destination) || File.Exists(shortcut)) throw new IOException("目标文件或原位快捷方式已存在。");
                     MoveFileAcrossVolumes(source, destination);
+                    moved = true;
                     string script = "$s=New-Object -ComObject WScript.Shell; $l=$s.CreateShortcut('" +
                         CommandLineTools.EscapePowerShellLiteral(shortcut) + "'); $l.TargetPath='" +
                         CommandLineTools.EscapePowerShellLiteral(destination) + "'; $l.Save()";
                     ProcessResult created = ProcessRunner.RunPowerShellAsync(script, 60000, cancellationToken).GetAwaiter().GetResult();
                     if (!created.Success || !File.Exists(shortcut))
-                    {
-                        MoveFileAcrossVolumes(destination, source);
                         throw new IOException("快捷方式创建失败：" + created.Error);
-                    }
                     result.AffectedPaths.Add(destination);
                     result.AffectedPaths.Add(shortcut);
                 }
+                catch (OperationCanceledException)
+                {
+                    RollBackShortcutMigration(source, destination, shortcut, moved);
+                    throw;
+                }
                 catch (Exception ex)
                 {
+                    try { RollBackShortcutMigration(source, destination, shortcut, moved); }
+                    catch (Exception rollbackError)
+                    {
+                        ex = new IOException(ex.Message + "；回滚失败：" + rollbackError.Message, ex);
+                    }
                     result.Errors.Add(Path.GetFileName(source) + "：" + ex.Message);
                 }
             }
             return result;
+        }
+
+        private static void RollBackShortcutMigration(string source, string destination, string shortcut, bool moved)
+        {
+            if (File.Exists(shortcut)) File.Delete(shortcut);
+            if (!moved || !File.Exists(destination) || File.Exists(source)) return;
+            MoveFileAcrossVolumes(destination, source);
         }
 
         private static void MoveFileAcrossVolumes(string source, string destination)

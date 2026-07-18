@@ -1,5 +1,8 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
+using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace ZyperWin__
@@ -99,7 +102,82 @@ namespace ZyperWin__
             grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(218, 241, 230);
             grid.DefaultCellStyle.SelectionForeColor = AppPalette.Text;
             grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(249, 251, 250);
+            AttachStandardGridTools(grid);
             return grid;
+        }
+
+        private static void AttachStandardGridTools(DataGridView grid)
+        {
+            grid.CellToolTipTextNeeded += delegate(object sender, DataGridViewCellToolTipTextNeededEventArgs args)
+            {
+                if (args.RowIndex < 0 || args.ColumnIndex < 0) return;
+                object value = grid.Rows[args.RowIndex].Cells[args.ColumnIndex].FormattedValue;
+                string text = Convert.ToString(value);
+                if (!string.IsNullOrWhiteSpace(text)) args.ToolTipText = grid.Columns[args.ColumnIndex].HeaderText + "：" + text;
+            };
+            grid.MouseDown += delegate(object sender, MouseEventArgs args)
+            {
+                if (args.Button != MouseButtons.Right) return;
+                DataGridView.HitTestInfo hit = grid.HitTest(args.X, args.Y);
+                if (hit.RowIndex >= 0 && hit.ColumnIndex >= 0)
+                    grid.CurrentCell = grid.Rows[hit.RowIndex].Cells[hit.ColumnIndex];
+            };
+
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("打开文件位置", null, delegate
+            {
+                string path = CurrentPath(grid);
+                if (string.IsNullOrWhiteSpace(path)) return;
+                string target = File.Exists(path) ? "/select,\"" + path + "\"" : "\"" + path + "\"";
+                Process.Start(new ProcessStartInfo("explorer.exe", target) { UseShellExecute = true });
+            });
+            menu.Items.Add("复制完整路径", null, delegate
+            {
+                string path = CurrentPath(grid);
+                if (!string.IsNullOrWhiteSpace(path)) Clipboard.SetText(path);
+            });
+            menu.Items.Add("复制当前单元格", null, delegate
+            {
+                if (grid.CurrentCell != null) Clipboard.SetText(Convert.ToString(grid.CurrentCell.FormattedValue) ?? string.Empty);
+            });
+            menu.Items.Add("复制整行", null, delegate
+            {
+                if (grid.CurrentRow == null) return;
+                Clipboard.SetText(string.Join("\t", grid.CurrentRow.Cells.Cast<DataGridViewCell>()
+                    .Select(value => Convert.ToString(value.FormattedValue) ?? string.Empty)));
+            });
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("查看操作日志", null, delegate
+            {
+                string directory = Path.GetDirectoryName(OperationLogger.FilePath);
+                if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+                if (!File.Exists(OperationLogger.FilePath)) File.WriteAllText(OperationLogger.FilePath, string.Empty, System.Text.Encoding.UTF8);
+                Process.Start(new ProcessStartInfo("notepad.exe", "\"" + OperationLogger.FilePath + "\"") { UseShellExecute = true });
+            });
+            menu.Opening += delegate
+            {
+                bool hasCell = grid.CurrentCell != null;
+                string path = CurrentPath(grid);
+                menu.Items[0].Enabled = !string.IsNullOrWhiteSpace(path) && (File.Exists(path) || Directory.Exists(path));
+                menu.Items[1].Enabled = !string.IsNullOrWhiteSpace(path);
+                menu.Items[2].Enabled = hasCell;
+                menu.Items[3].Enabled = grid.CurrentRow != null;
+            };
+            grid.ContextMenuStrip = menu;
+        }
+
+        private static string CurrentPath(DataGridView grid)
+        {
+            if (grid.CurrentRow == null) return null;
+            string[] names = { "Path", "InstallLocation", "Source", "TargetPath", "FullPath" };
+            foreach (string name in names)
+            {
+                if (!grid.Columns.Contains(name)) continue;
+                string value = Convert.ToString(grid.CurrentRow.Cells[name].FormattedValue);
+                if (string.IsNullOrWhiteSpace(value) || value.IndexOf('；') >= 0) continue;
+                return Environment.ExpandEnvironmentVariables(value.Trim());
+            }
+            return null;
         }
 
         public static Panel Header(string title, string subtitle, out FlowLayoutPanel actions)

@@ -257,7 +257,7 @@ namespace ZyperWin__
                 ? "将删除 " + paths.Count + " 个文件。删除前会备份到非 C 盘，可在底部“一键还原”恢复。\n备份位置：" + backupRoot
                 : "将永久删除 " + paths.Count + " 个文件。当前没有可用的非 C 盘，因此不会在 C 盘创建副本；删除后无法通过本工具还原。";
             await RunOperationAsync("批量删除", warning + "\n\n是否继续？",
-                token => service.DeleteAsync(paths, token));
+                token => service.DeleteAsync(paths, hasExternalBackup ? backupRoot : null, hasExternalBackup, token));
         }
 
         private async Task ShredAsync()
@@ -303,12 +303,14 @@ namespace ZyperWin__
         private async Task RunOperationAsync(string title, string warning, Func<CancellationToken, Task<FileOperationSummary>> operation, MessageBoxIcon icon = MessageBoxIcon.Warning)
         {
             if (MessageBox.Show(warning, title, MessageBoxButtons.YesNo, icon) != DialogResult.Yes) return;
+            AppOperationScope operationScope = null;
             cancellation = new CancellationTokenSource();
             SetBusy(true, false);
             status.Text = "正在执行：" + title;
             bool refreshAfterOperation = false;
             try
             {
+                operationScope = AppOperationCoordinator.Begin(title);
                 FileOperationSummary result = await operation(cancellation.Token);
                 status.Text = title + "：" + result.Message.Split('\n')[0].Trim();
                 if (result.Success) OperationLogger.Info(title, result.Message);
@@ -334,6 +336,7 @@ namespace ZyperWin__
                     cancellation = null;
                 }
                 if (!IsDisposed) SetBusy(false, false);
+                if (operationScope != null) operationScope.Dispose();
             }
             if (refreshAfterOperation && !IsDisposed) await ScanAsync();
         }

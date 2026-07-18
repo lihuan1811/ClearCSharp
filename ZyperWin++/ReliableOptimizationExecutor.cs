@@ -110,11 +110,8 @@ namespace ZyperWin__
             }
             catch (Exception ex)
             {
-                string preservedPath = JournalPath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
-                try { File.Move(JournalPath, preservedPath); }
-                catch { preservedPath = JournalPath; }
-                OperationLogger.Error("系统优化快照", "快照索引损坏，已保留到 " + preservedPath + "：" + ex.Message);
-                return new List<OptimizationBackupRecord>();
+                OperationLogger.Error("系统优化快照", "快照索引损坏，已停止操作：" + ex.Message);
+                throw new InvalidDataException("系统优化快照损坏，为保护原设置已停止操作。快照位置：" + JournalPath, ex);
             }
         }
 
@@ -122,9 +119,18 @@ namespace ZyperWin__
         {
             string directory = Path.GetDirectoryName(JournalPath);
             Directory.CreateDirectory(directory);
-            string temporary = JournalPath + ".tmp";
-            File.WriteAllText(temporary, JsonSerializer.Serialize(records, JsonOptions), new UTF8Encoding(false));
-            FileSystemTools.ReplaceFile(temporary, JournalPath);
+            string temporary = JournalPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temporary, JsonSerializer.Serialize(records, JsonOptions), new UTF8Encoding(false));
+                FileSystemTools.ReplaceFile(temporary, JournalPath);
+            }
+            finally
+            {
+                if (File.Exists(temporary) && File.Exists(JournalPath)) File.Delete(temporary);
+                else if (File.Exists(temporary))
+                    OperationLogger.Error("系统优化快照", "快照替换失败，恢复副本已保留：" + temporary);
+            }
         }
     }
 
@@ -149,6 +155,29 @@ namespace ZyperWin__
             return OptimizationBackupStore.ReadAll()
                 .GroupBy(value => value.ItemTag, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.Max(value => value.CreatedAtUtc), StringComparer.Ordinal);
+        }
+
+        public static bool IsSupported(XElement item, string itemTag, out string reason)
+        {
+            reason = string.Empty;
+            try
+            {
+                if (item == null) throw new InvalidDataException("优化规则不存在。");
+                var snapshots = new List<OptimizationSnapshot>();
+                CaptureSpecialState(itemTag, snapshots);
+                XElement optimize = item.Element("Optimize") ?? throw new InvalidDataException("缺少 Optimize 配置。");
+                foreach (XElement command in optimize.Elements())
+                {
+                    EnsureCommandTargetIsAvailable(command);
+                    CaptureCommand(command, snapshots);
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                reason = ex.Message;
+                return false;
+            }
         }
 
         public static OptimizationExecutionResult RestoreAllRecorded()
@@ -313,6 +342,24 @@ namespace ZyperWin__
                 default:
                     throw new NotSupportedException("不支持的优化命令：" + command.Name.LocalName);
             }
+        }
+
+        private static void EnsureCommandTargetIsAvailable(XElement command)
+        {
+            string scheme = null;
+            if (command.Name.LocalName == "PowerCfg")
+                scheme = Required(command, "Scheme");
+            else if (command.Name.LocalName == "ExplorerNotify" &&
+                     string.Equals(command.Attribute("Type")?.Value, "Cmd", StringComparison.OrdinalIgnoreCase))
+            {
+                Match match = Regex.Match(Required(command, "Cmd"),
+                    @"^powercfg(?:\.exe)?\s+-setactive\s+([0-9a-fA-F-]{36})", RegexOptions.IgnoreCase);
+                if (match.Success) scheme = match.Groups[1].Value;
+            }
+            if (string.IsNullOrWhiteSpace(scheme)) return;
+            ProcessResult plans = ProcessRunner.Run("powercfg.exe", "/list", 15000, CancellationToken.None);
+            if (!plans.Success || plans.Output.IndexOf(scheme, StringComparison.OrdinalIgnoreCase) < 0)
+                throw new InvalidOperationException("当前系统没有电源计划：" + scheme);
         }
 
         private static void ExecuteCommand(XElement command)

@@ -121,6 +121,20 @@ namespace ZyperWin__
             grid.Columns.Add(Column("InstallLocation", "安装路径", 230));
             foreach (DataGridViewColumn column in grid.Columns)
                 if (column.Name != "Selected") column.ReadOnly = true;
+            grid.Columns["Size"].SortMode = DataGridViewColumnSortMode.Automatic;
+            grid.SortCompare += GridSortCompare;
+        }
+
+        private void GridSortCompare(object sender, DataGridViewSortCompareEventArgs e)
+        {
+            if (grid.Columns[e.Column.Index].Name != "Size") return;
+            var left = grid.Rows[e.RowIndex1].Tag as InstalledApp;
+            var right = grid.Rows[e.RowIndex2].Tag as InstalledApp;
+            e.SortResult = (left == null ? 0L : left.EstimatedBytes).CompareTo(right == null ? 0L : right.EstimatedBytes);
+            if (e.SortResult == 0)
+                e.SortResult = string.Compare(left == null ? string.Empty : left.Name, right == null ? string.Empty : right.Name,
+                    StringComparison.CurrentCultureIgnoreCase);
+            e.Handled = true;
         }
 
         private static DataGridViewTextBoxColumn Column(string name, string title, int width)
@@ -223,6 +237,7 @@ namespace ZyperWin__
             if (MessageBox.Show("即将卸载 " + selected.Count + " 个应用：\n\n" + preview + warning + "\n\n是否继续？",
                 force ? "确认强力卸载" : "确认批量卸载", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
+            AppOperationScope operationScope = null;
             SetBusy(true);
             operationCancellation = new CancellationTokenSource();
             progress.Style = ProgressBarStyle.Continuous;
@@ -234,6 +249,7 @@ namespace ZyperWin__
             var residuals = new List<UninstallResidualScan>();
             try
             {
+                operationScope = AppOperationCoordinator.Begin(force ? "软件强力卸载" : "软件批量卸载");
                 for (int index = 0; index < selected.Count; index++)
                 {
                     InstalledApp app = selected[index];
@@ -298,6 +314,7 @@ namespace ZyperWin__
             {
                 operationCancellation.Dispose();
                 operationCancellation = null;
+                if (operationScope != null) operationScope.Dispose();
                 if (!IsDisposed)
                 {
                     SetBusy(false);
@@ -315,10 +332,12 @@ namespace ZyperWin__
                 MessageBox.Show("请选择一个桌面应用。", "C DiskGlow", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+            AppOperationScope operationScope = null;
             SetBusy(true);
             operationCancellation = new CancellationTokenSource();
             try
             {
+                operationScope = AppOperationCoordinator.Begin("卸载残留清理");
                 status.Text = "正在扫描卸载残留：" + app.Name;
                 UninstallResidualScan scan = await service.ScanResidualsAsync(app, operationCancellation.Token);
                 if (scan.Count == 0)
@@ -349,6 +368,7 @@ namespace ZyperWin__
             {
                 operationCancellation.Dispose();
                 operationCancellation = null;
+                if (operationScope != null) operationScope.Dispose();
                 if (!IsDisposed) SetBusy(false);
             }
         }

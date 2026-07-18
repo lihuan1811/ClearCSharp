@@ -31,8 +31,12 @@ namespace ZyperWin__
             var gpuPage = new TabPage("显卡专属") { BackColor = AppPalette.Canvas, Padding = new Padding(0) };
             gpuPage.Controls.Add(new GpuDashboard { Dock = DockStyle.Fill });
 
+            var advancedPage = new TabPage("高级系统管控") { BackColor = AppPalette.Canvas, Padding = new Padding(0) };
+            advancedPage.Controls.Add(new AdvancedControlDashboard { Dock = DockStyle.Fill });
+
             tabs.TabPages.Add(zyperPage);
             tabs.TabPages.Add(gpuPage);
+            tabs.TabPages.Add(advancedPage);
             Controls.Add(tabs);
             Controls.Add(header);
         }

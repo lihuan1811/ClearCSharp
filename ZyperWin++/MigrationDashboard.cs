@@ -208,11 +208,13 @@ namespace ZyperWin__
         {
             if (MessageBox.Show("将还原本程序记录的全部系统目录迁移。请关闭相关软件并确认 C 盘空间充足。\n\n是否继续？",
                 "还原所有迁移目录", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            AppOperationScope operationScope = null;
             cancellation = new CancellationTokenSource();
             SetBusy(true);
             status.Text = "正在还原所有迁移目录...";
             try
             {
+                operationScope = AppOperationCoordinator.Begin("还原所有迁移目录");
                 FileOperationSummary result = await service.RestoreAllAsync(cancellation.Token);
                 ShowResult("还原所有迁移目录", result);
             }
@@ -224,6 +226,7 @@ namespace ZyperWin__
             {
                 cancellation.Dispose();
                 cancellation = null;
+                if (operationScope != null) operationScope.Dispose();
                 if (!IsDisposed)
                 {
                     SetBusy(false);
@@ -234,6 +237,7 @@ namespace ZyperWin__
 
         private async Task RunBatchAsync(string title, IList<MigrationFolder> folders, Func<MigrationFolder, Task<FileOperationSummary>> action)
         {
+            AppOperationScope operationScope = null;
             cancellation = new CancellationTokenSource();
             SetBusy(true);
             progress.Style = ProgressBarStyle.Continuous;
@@ -243,6 +247,7 @@ namespace ZyperWin__
             var combined = new FileOperationSummary();
             try
             {
+                operationScope = AppOperationCoordinator.Begin(title);
                 for (int index = 0; index < folders.Count; index++)
                 {
                     status.Text = string.Format("{0} {1}/{2}：{3}", title, index + 1, folders.Count, folders[index].Name);
@@ -261,6 +266,7 @@ namespace ZyperWin__
             {
                 cancellation.Dispose();
                 cancellation = null;
+                if (operationScope != null) operationScope.Dispose();
                 if (!IsDisposed)
                 {
                     SetBusy(false);

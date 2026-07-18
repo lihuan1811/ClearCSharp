@@ -17,6 +17,8 @@ namespace ZyperWin__
         private readonly Button restoreOptimizationsButton = UiFactory.SecondaryButton("还原系统优化");
         private readonly Button restoreMigrationsButton = UiFactory.SecondaryButton("还原目录迁移");
         private CancellationTokenSource cancellation;
+        private int optimizationCount;
+        private int migrationCount;
 
         public RestoreDialog()
         {
@@ -41,7 +43,7 @@ namespace ZyperWin__
             });
             header.Controls.Add(new Label
             {
-                Text = "文件清理、由本程序记录的 ZyperWin++ 系统优化和系统目录迁移分别还原。",
+                Text = "文件清理、ZyperWin++、显卡、高级系统管控和系统目录迁移都按本程序真实记录还原。",
                 Dock = DockStyle.Bottom,
                 Height = 22,
                 Font = UiFactory.BaseFont,
@@ -104,11 +106,29 @@ namespace ZyperWin__
                 int index = grid.Rows.Add(false, record.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"), DisplayFormat.Bytes(record.Bytes), record.SourcePath);
                 grid.Rows[index].Tag = record;
             }
-            int optimizations = Optimize.JournaledOptimizationCount();
-            int migrations = MigrationService.MigratedRecordCount();
-            status.Text = string.Format("文件备份 {0} 条；系统优化记录 {1} 项；目录迁移 {2} 项。", grid.Rows.Count, optimizations, migrations);
-            restoreOptimizationsButton.Enabled = optimizations > 0;
-            restoreMigrationsButton.Enabled = migrations > 0;
+            var errors = new List<string>();
+            int zyperCount = ReadCount("ZyperWin++", Optimize.JournaledOptimizationCount, errors);
+            int gpuCount = ReadCount("显卡", () => GpuService.JournalCount, errors);
+            int controlCount = ReadCount("高级管控", () => SystemControlService.JournalCount, errors);
+            optimizationCount = zyperCount + gpuCount + controlCount;
+            migrationCount = ReadCount("目录迁移", MigrationService.MigratedRecordCount, errors);
+            status.Text = string.Format("文件备份 {0} 条；可读系统优化记录 {1} 项；目录迁移 {2} 项。", grid.Rows.Count, optimizationCount, migrationCount);
+            if (errors.Count > 0)
+                status.Text += " 部分记录损坏，已隔离：" + DisplayFormat.SingleLine(string.Join("；", errors), 130);
+            restoreOptimizationsButton.Enabled = optimizationCount > 0;
+            restoreMigrationsButton.Enabled = migrationCount > 0;
+        }
+
+        private static int ReadCount(string area, Func<int> reader, ICollection<string> errors)
+        {
+            try { return reader(); }
+            catch (Exception ex)
+            {
+                string message = area + "记录读取失败：" + ex.Message;
+                errors.Add(message);
+                OperationLogger.Error("全局还原", message);
+                return 0;
+            }
         }
 
         private async Task RestoreFilesAsync()
@@ -122,10 +142,12 @@ namespace ZyperWin__
             if (MessageBox.Show("将把 " + records.Count + " 个文件备份写回原路径，同名现有文件会被覆盖。\n\n是否继续？",
                 "确认还原文件", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
+            AppOperationScope operationScope = null;
             cancellation = new CancellationTokenSource();
             SetBusy(true);
             try
             {
+                operationScope = AppOperationCoordinator.Begin("全局文件还原");
                 int restored = 0;
                 var errors = new List<string>();
                 await Task.Run(() =>
@@ -148,25 +170,89 @@ namespace ZyperWin__
             finally
             {
                 FinishBusy();
+                if (operationScope != null) operationScope.Dispose();
             }
         }
 
         private async Task RestoreOptimizationsAsync()
         {
-            int count = Optimize.JournaledOptimizationCount();
-            if (count == 0) return;
-            if (MessageBox.Show("将还原本程序变更日志中记录的 " + count + " 个 ZyperWin++ 系统优化项。不会还原未由本程序记录的用户设置。\n\n是否继续？",
+            var readErrors = new List<string>();
+            int zyperCount = ReadCount("ZyperWin++", Optimize.JournaledOptimizationCount, readErrors);
+            int gpuCount = ReadCount("显卡", () => GpuService.JournalCount, readErrors);
+            int controlCount = ReadCount("高级管控", () => SystemControlService.JournalCount, readErrors);
+            int count = zyperCount + gpuCount + controlCount;
+            if (count == 0)
+            {
+                if (readErrors.Count > 0)
+                    MessageBox.Show(string.Join(Environment.NewLine, readErrors), "还原记录不可读", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            string unreadableNotice = readErrors.Count == 0
+                ? string.Empty
+                : "\n\n以下类别记录损坏，本次只还原其它可读类别：\n" + string.Join("\n", readErrors);
+            if (MessageBox.Show("将还原本程序记录的 " + count + " 个系统变更（ZyperWin++ " + zyperCount +
+                "、显卡 " + gpuCount + "、高级管控 " + controlCount + "）。不会覆盖没有快照的用户设置。" + unreadableNotice + "\n\n是否继续？",
                 "确认还原系统优化", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            AppOperationScope operationScope = null;
+            cancellation = new CancellationTokenSource();
             SetBusy(true);
             try
             {
-                using (var optimize = new Optimize())
+                operationScope = AppOperationCoordinator.Begin("全局系统优化还原");
+                int restored = 0;
+                var errors = new List<string>(readErrors);
+                if (zyperCount > 0)
                 {
-                    optimize.CreateControl();
-                    int restored = await optimize.RestoreJournaledOptimizationsAsync();
-                    status.Text = "系统优化还原完成：" + restored + " 项。";
+                    try
+                    {
+                        using (var optimize = new Optimize())
+                        {
+                            optimize.CreateControl();
+                            restored += await optimize.RestoreJournaledOptimizationsAsync();
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        errors.Add("ZyperWin++ 还原失败：" + ex.Message);
+                        OperationLogger.Error("全局还原", "ZyperWin++：" + ex.Message);
+                    }
                 }
+                if (gpuCount > 0)
+                {
+                    try
+                    {
+                        FileOperationSummary gpu = await new GpuService().RestoreAllAsync(cancellation.Token);
+                        restored += gpu.AffectedPaths.Count;
+                        errors.AddRange(gpu.Errors.Select(value => "显卡：" + value));
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        errors.Add("显卡还原失败：" + ex.Message);
+                        OperationLogger.Error("全局还原", "显卡：" + ex.Message);
+                    }
+                }
+                if (controlCount > 0)
+                {
+                    try
+                    {
+                        FileOperationSummary controls = await new SystemControlService().RestoreAllAsync(cancellation.Token);
+                        restored += controls.AffectedPaths.Count;
+                        errors.AddRange(controls.Errors.Select(value => "高级管控：" + value));
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        errors.Add("高级管控还原失败：" + ex.Message);
+                        OperationLogger.Error("全局还原", "高级管控：" + ex.Message);
+                    }
+                }
+                status.Text = "系统变更还原完成：成功 " + restored + " 项，失败 " + errors.Count + " 项。";
+                if (errors.Count > 0)
+                    MessageBox.Show(string.Join(Environment.NewLine, errors.Take(10)), "部分系统变更还原失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+            catch (OperationCanceledException) { status.Text = "系统优化还原已取消。"; }
             catch (Exception ex)
             {
                 status.Text = "系统优化还原失败：" + DisplayFormat.SingleLine(ex.Message, 150);
@@ -175,21 +261,36 @@ namespace ZyperWin__
             }
             finally
             {
+                if (cancellation != null)
+                {
+                    cancellation.Dispose();
+                    cancellation = null;
+                }
                 SetBusy(false);
                 RefreshRecords();
+                if (operationScope != null) operationScope.Dispose();
             }
         }
 
         private async Task RestoreMigrationsAsync()
         {
-            int count = MigrationService.MigratedRecordCount();
+            int count;
+            try { count = MigrationService.MigratedRecordCount(); }
+            catch (Exception ex)
+            {
+                OperationLogger.Error("全局还原", "目录迁移记录读取失败：" + ex.Message);
+                MessageBox.Show(ex.Message, "目录迁移记录不可读", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
             if (count == 0) return;
             if (MessageBox.Show("将把 " + count + " 个已迁移系统目录移回原路径。请关闭相关软件并确认 C 盘空间充足。\n\n是否继续？",
                 "确认还原目录迁移", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            AppOperationScope operationScope = null;
             cancellation = new CancellationTokenSource();
             SetBusy(true);
             try
             {
+                operationScope = AppOperationCoordinator.Begin("全局目录迁移还原");
                 var service = new MigrationService();
                 FileOperationSummary result = await service.RestoreAllAsync(cancellation.Token);
                 status.Text = "目录迁移还原：" + result.Message.Split('\n')[0].Trim();
@@ -202,6 +303,7 @@ namespace ZyperWin__
             finally
             {
                 FinishBusy();
+                if (operationScope != null) operationScope.Dispose();
             }
         }
 
@@ -221,8 +323,8 @@ namespace ZyperWin__
             ControlBox = !busy;
             grid.Enabled = !busy;
             restoreFilesButton.Enabled = !busy;
-            restoreOptimizationsButton.Enabled = !busy && Optimize.JournaledOptimizationCount() > 0;
-            restoreMigrationsButton.Enabled = !busy && MigrationService.MigratedRecordCount() > 0;
+            restoreOptimizationsButton.Enabled = !busy && optimizationCount > 0;
+            restoreMigrationsButton.Enabled = !busy && migrationCount > 0;
             progress.Style = busy ? ProgressBarStyle.Marquee : ProgressBarStyle.Blocks;
             if (!busy) progress.Value = 0;
         }

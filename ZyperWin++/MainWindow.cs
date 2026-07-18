@@ -21,6 +21,7 @@ namespace ZyperWin__
         private readonly FlowLayoutPanel navigationButtons = new FlowLayoutPanel();
         private readonly Panel content = new Panel();
         private readonly Panel bottomBar = new Panel();
+        private readonly FlowLayoutPanel bottomActions = new FlowLayoutPanel();
         private readonly Label shellStatus = new Label();
         private readonly Dictionary<string, Button> buttons = new Dictionary<string, Button>();
         private string activeModule;
@@ -47,6 +48,9 @@ namespace ZyperWin__
             Controls.Add(navigation);
             Controls.Add(titleBar);
 
+            AppOperationCoordinator.Changed += OnOperationChanged;
+            FormClosing += MainWindowFormClosing;
+            FormClosed += delegate { AppOperationCoordinator.Changed -= OnOperationChanged; };
             Shown += delegate { Navigate(FinalModules[0]); };
         }
 
@@ -57,8 +61,31 @@ namespace ZyperWin__
                 Invoke(new Action<bool>(SetMenuEnabled), enabled);
                 return;
             }
-            navigationButtons.Enabled = enabled;
+            bool allow = enabled && !AppOperationCoordinator.IsBusy;
+            navigationButtons.Enabled = allow;
+            bottomActions.Enabled = allow;
             shellStatus.Text = enabled ? "管理员权限已启用" : "正在执行系统操作，请稍候...";
+        }
+
+        private void OnOperationChanged(bool busy, string description)
+        {
+            if (IsDisposed) return;
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<bool, string>(OnOperationChanged), busy, description);
+                return;
+            }
+            navigationButtons.Enabled = !busy;
+            bottomActions.Enabled = !busy;
+            shellStatus.Text = busy ? "正在执行：" + description + "，请稍候..." : "管理员权限已启用";
+        }
+
+        private void MainWindowFormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (!AppOperationCoordinator.IsBusy) return;
+            e.Cancel = true;
+            MessageBox.Show("正在执行“" + AppOperationCoordinator.ActiveDescription + "”，完成后才能关闭程序。",
+                "系统操作进行中", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         public void ReportStatus(string message)
@@ -130,14 +157,11 @@ namespace ZyperWin__
             shellStatus.Padding = new Padding(14, 0, 0, 0);
             shellStatus.Font = new Font("Microsoft YaHei UI", 8.5F);
             shellStatus.Text = "管理员权限已启用";
-            var actions = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Right,
-                AutoSize = true,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false,
-                Margin = new Padding(0)
-            };
+            bottomActions.Dock = DockStyle.Right;
+            bottomActions.AutoSize = true;
+            bottomActions.FlowDirection = FlowDirection.LeftToRight;
+            bottomActions.WrapContents = false;
+            bottomActions.Margin = new Padding(0);
             Button logs = UiFactory.SecondaryButton("操作日志");
             Button restore = UiFactory.SecondaryButton("全局一键还原");
             logs.Height = 27;
@@ -146,10 +170,10 @@ namespace ZyperWin__
             restore.Width = 112;
             logs.Click += delegate { using (var dialog = new Form { Text = "全部操作日志", ClientSize = new Size(900, 560), StartPosition = FormStartPosition.CenterParent }) { dialog.Controls.Add(new LogDashboard { Dock = DockStyle.Fill }); dialog.ShowDialog(this); } };
             restore.Click += delegate { using (var dialog = new RestoreDialog()) dialog.ShowDialog(this); };
-            actions.Controls.Add(logs);
-            actions.Controls.Add(restore);
+            bottomActions.Controls.Add(logs);
+            bottomActions.Controls.Add(restore);
             bottomBar.Controls.Add(shellStatus);
-            bottomBar.Controls.Add(actions);
+            bottomBar.Controls.Add(bottomActions);
         }
 
         private void AddNavigationButton(string module)
@@ -177,6 +201,12 @@ namespace ZyperWin__
 
         private void Navigate(string module)
         {
+            if (AppOperationCoordinator.IsBusy)
+            {
+                MessageBox.Show("正在执行“" + AppOperationCoordinator.ActiveDescription + "”，完成后才能切换模块。",
+                    "系统操作进行中", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             if (module == activeModule) return;
             activeModule = module;
             foreach (KeyValuePair<string, Button> pair in buttons)

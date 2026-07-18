@@ -168,10 +168,35 @@ namespace ZyperWin__
             };
         }
 
+        internal static IList<MigrationFolder> CatalogForRecords(IEnumerable<MigrationRecord> records)
+        {
+            IList<MigrationFolder> folders = Catalog();
+            foreach (MigrationRecord record in records ?? Enumerable.Empty<MigrationRecord>())
+            {
+                MigrationFolder folder = folders.FirstOrDefault(value =>
+                    string.Equals(value.Key, record.Key, StringComparison.OrdinalIgnoreCase));
+                if (folder == null) continue;
+                MigrationLocation location = (folder.Locations ?? new List<MigrationLocation>()).FirstOrDefault(value =>
+                    string.Equals(value.Key, record.LocationKey ?? "primary", StringComparison.OrdinalIgnoreCase));
+                if (location == null && folder.Locations != null && folder.Locations.Count == 1)
+                    location = folder.Locations[0];
+                if (location != null && !string.IsNullOrWhiteSpace(record.SourcePath))
+                    location.SourcePath = record.SourcePath;
+            }
+            foreach (MigrationFolder folder in folders)
+            {
+                if (folder.Locations == null || folder.Locations.Count == 0) continue;
+                folder.SourcePath = folder.Locations.Count == 1
+                    ? folder.Locations[0].SourcePath
+                    : string.Join("；", folder.Locations.Select(value => value.SourcePath));
+            }
+            return folders;
+        }
+
         private static IList<MigrationFolder> Scan(CancellationToken cancellationToken)
         {
             IList<MigrationRecord> records = ReadRecords();
-            IList<MigrationFolder> folders = Catalog();
+            IList<MigrationFolder> folders = CatalogForRecords(records);
             foreach (MigrationFolder folder in folders)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -333,7 +358,7 @@ namespace ZyperWin__
             var result = new FileOperationSummary();
             IList<MigrationRecord> allRecords = ReadRecords();
             IList<MigrationRecord> records = allRecords.Where(item => string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase)).ToList();
-            MigrationFolder folder = Catalog().FirstOrDefault(item => string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase));
+            MigrationFolder folder = CatalogForRecords(records).FirstOrDefault(item => string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase));
             if (records.Count == 0 || folder == null)
             {
                 result.Errors.Add("该目录没有可还原的迁移记录。");
@@ -825,11 +850,6 @@ namespace ZyperWin__
             if (transaction == null) return;
             try
             {
-                MigrationFolder folder = Catalog().FirstOrDefault(value =>
-                    string.Equals(value.Key, transaction.Key, StringComparison.OrdinalIgnoreCase));
-                if (folder == null) throw new InvalidDataException("无法识别事务目录：" + transaction.Key);
-
-                IList<MigrationRecord> currentRecords = ReadRecords();
                 List<MigrationRecord> transactionRecords = transaction.Entries.Select(entry => new MigrationRecord
                 {
                     Key = transaction.Key,
@@ -838,6 +858,11 @@ namespace ZyperWin__
                     TargetPath = entry.TargetPath,
                     CreatedAt = transaction.CreatedAt
                 }).ToList();
+                MigrationFolder folder = CatalogForRecords(transactionRecords).FirstOrDefault(value =>
+                    string.Equals(value.Key, transaction.Key, StringComparison.OrdinalIgnoreCase));
+                if (folder == null) throw new InvalidDataException("无法识别事务目录：" + transaction.Key);
+
+                IList<MigrationRecord> currentRecords = ReadRecords();
 
                 if (string.Equals(transaction.Operation, "Migrate", StringComparison.OrdinalIgnoreCase))
                 {
@@ -972,10 +997,14 @@ namespace ZyperWin__
             {
                 var records = new List<MigrationRecord>();
                 if (!File.Exists(StatePath)) return records;
-                foreach (string line in File.ReadAllLines(StatePath, Encoding.UTF8))
+                string[] lines = File.ReadAllLines(StatePath, Encoding.UTF8);
+                for (int index = 0; index < lines.Length; index++)
                 {
+                    string line = lines[index];
+                    if (string.IsNullOrWhiteSpace(line)) continue;
                     string[] fields = line.Split('\t');
-                    if (fields.Length != 4 && fields.Length != 5) continue;
+                    if (fields.Length != 4 && fields.Length != 5)
+                        throw new InvalidDataException("迁移记录第 " + (index + 1) + " 行格式无效，已停止操作以避免丢失还原信息。");
                     try
                     {
                         records.Add(new MigrationRecord
@@ -987,8 +1016,9 @@ namespace ZyperWin__
                             CreatedAt = DateTime.Parse(fields.Length == 5 ? fields[4] : fields[3]).ToUniversalTime()
                         });
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        throw new InvalidDataException("迁移记录第 " + (index + 1) + " 行无法解析，已停止操作以避免丢失还原信息。", ex);
                     }
                 }
                 return records;
@@ -1010,31 +1040,16 @@ namespace ZyperWin__
             string directory = Path.GetDirectoryName(path);
             Directory.CreateDirectory(directory);
             string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            string backup = path + ".bak";
             try
             {
                 File.WriteAllLines(temporary, lines, new UTF8Encoding(false));
-                if (File.Exists(path))
-                {
-                    if (File.Exists(backup)) File.Delete(backup);
-                    try
-                    {
-                        File.Replace(temporary, path, backup);
-                    }
-                    catch
-                    {
-                        if (!File.Exists(temporary)) throw;
-                        File.Delete(path);
-                        File.Move(temporary, path);
-                    }
-                    try { if (File.Exists(backup)) File.Delete(backup); }
-                    catch { }
-                }
-                else File.Move(temporary, path);
+                FileSystemTools.ReplaceFile(temporary, path);
             }
             finally
             {
-                if (File.Exists(temporary)) File.Delete(temporary);
+                if (File.Exists(temporary) && File.Exists(path)) File.Delete(temporary);
+                else if (File.Exists(temporary))
+                    OperationLogger.Error("目录迁移状态", "状态替换失败，恢复副本已保留：" + temporary);
             }
         }
 

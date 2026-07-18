@@ -20,20 +20,121 @@ namespace ZyperWin__
                 return;
             }
 
-            string backupPath = destinationPath + ".bak";
-            if (File.Exists(backupPath)) File.Delete(backupPath);
+            string suffix = Guid.NewGuid().ToString("N");
+            string backupPath = destinationPath + "." + suffix + ".bak";
             try
             {
-                File.Replace(temporaryPath, destinationPath, backupPath);
+                File.Replace(temporaryPath, destinationPath, backupPath, true);
             }
             catch
             {
                 if (!File.Exists(temporaryPath)) throw;
-                File.Delete(destinationPath);
-                File.Move(temporaryPath, destinationPath);
+
+                // Some Windows file systems do not implement File.Replace. Keep the
+                // previous destination until the temporary file has been promoted.
+                string displacedPath = destinationPath + "." + suffix + ".old";
+                if (!File.Exists(destinationPath) && File.Exists(backupPath))
+                    File.Move(backupPath, destinationPath);
+                File.Move(destinationPath, displacedPath);
+                bool promoted = false;
+                try
+                {
+                    File.Move(temporaryPath, destinationPath);
+                    promoted = true;
+                }
+                catch
+                {
+                    try
+                    {
+                        if (File.Exists(destinationPath)) File.Delete(destinationPath);
+                        if (File.Exists(displacedPath)) File.Move(displacedPath, destinationPath);
+                    }
+                    catch (Exception rollbackError)
+                    {
+                        OperationLogger.Error("状态文件", "替换失败且回滚失败：" + rollbackError.Message);
+                    }
+                    throw;
+                }
+                finally
+                {
+                    if (promoted)
+                    {
+                        try { if (File.Exists(displacedPath)) File.Delete(displacedPath); }
+                        catch { }
+                    }
+                }
             }
             try { if (File.Exists(backupPath)) File.Delete(backupPath); }
             catch { }
+        }
+    }
+
+    internal sealed class AppOperationScope : IDisposable
+    {
+        private readonly Guid id;
+        private int disposed;
+
+        internal AppOperationScope(Guid id)
+        {
+            this.id = id;
+        }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref disposed, 1) == 0)
+                AppOperationCoordinator.End(id);
+        }
+    }
+
+    internal static class AppOperationCoordinator
+    {
+        private static readonly object Sync = new object();
+        private static Guid activeId;
+        private static string activeDescription;
+
+        public static event Action<bool, string> Changed;
+
+        public static bool IsBusy
+        {
+            get { lock (Sync) return activeId != Guid.Empty; }
+        }
+
+        public static string ActiveDescription
+        {
+            get { lock (Sync) return activeDescription ?? string.Empty; }
+        }
+
+        public static AppOperationScope Begin(string description)
+        {
+            Guid id = Guid.NewGuid();
+            lock (Sync)
+            {
+                if (activeId != Guid.Empty)
+                    throw new InvalidOperationException("正在执行“" + activeDescription + "”，请等待该操作完成。");
+                activeId = id;
+                activeDescription = string.IsNullOrWhiteSpace(description) ? "系统操作" : description.Trim();
+            }
+            RaiseChanged(true, ActiveDescription);
+            return new AppOperationScope(id);
+        }
+
+        internal static void End(Guid id)
+        {
+            lock (Sync)
+            {
+                if (activeId != id) return;
+                activeId = Guid.Empty;
+                activeDescription = null;
+            }
+            RaiseChanged(false, string.Empty);
+        }
+
+        private static void RaiseChanged(bool busy, string description)
+        {
+            Action<bool, string> handler = Changed;
+            if (handler == null) return;
+            try { handler(busy, description); }
+            catch (Exception ex) { OperationLogger.Error("操作状态", ex.Message); }
         }
     }
 
@@ -180,19 +281,23 @@ namespace ZyperWin__
                         RedirectStandardError = false
                     };
                     killer.Start();
-                    killer.WaitForExit(10000);
+                    if (!killer.WaitForExit(10000))
+                    {
+                        try { killer.Kill(); } catch { }
+                    }
                 }
             }
             catch
             {
-                try
-                {
-                    if (!process.HasExited) process.Kill();
-                }
-                catch
-                {
-                }
             }
+
+            // taskkill itself can time out or return before the target exits.
+            try
+            {
+                if (!process.HasExited) process.Kill();
+                process.WaitForExit(5000);
+            }
+            catch { }
         }
 
         public static Encoding OutputEncodingFor(string fileName)
@@ -277,7 +382,11 @@ namespace ZyperWin__
             }
 
             var handler = EntryWritten;
-            if (handler != null) handler(line);
+            if (handler != null)
+            {
+                try { handler(line); }
+                catch { }
+            }
         }
     }
 
