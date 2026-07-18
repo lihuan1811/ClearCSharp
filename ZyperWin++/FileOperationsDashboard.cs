@@ -17,6 +17,7 @@ namespace ZyperWin__
         private readonly Button browseButton = UiFactory.SecondaryButton("选择目录");
         private readonly Button scanButton = UiFactory.PrimaryButton("扫描文件");
         private readonly DataGridView grid = UiFactory.Grid();
+        private readonly BusyAnimationOverlay busyOverlay = new BusyAnimationOverlay();
         private readonly Label status = UiFactory.StatusLabel("选择磁盘或目录，按类型扫描后勾选文件操作。");
         private readonly ProgressBar progress = new ProgressBar();
         private readonly List<Button> operationButtons = new List<Button>();
@@ -67,6 +68,9 @@ namespace ZyperWin__
             filterBar.Controls.Add(scanButton, 5, 0);
 
             ConfigureGrid();
+            var gridHost = new Panel { Dock = DockStyle.Fill, BackColor = AppPalette.Canvas };
+            gridHost.Controls.Add(grid);
+            busyOverlay.AttachTo(gridHost);
 
             var bottom = new TableLayoutPanel
             {
@@ -95,7 +99,7 @@ namespace ZyperWin__
             bottom.SetColumnSpan(actions, 2);
             bottom.Controls.Add(actions, 0, 1);
 
-            Controls.Add(grid);
+            Controls.Add(gridHost);
             Controls.Add(bottom);
             Controls.Add(filterBar);
             Controls.Add(header);
@@ -167,6 +171,7 @@ namespace ZyperWin__
             cancellation = new CancellationTokenSource();
             SetBusy(true, true);
             status.Text = "正在扫描文件...";
+            busyOverlay.Start("正在筛选文件", DisplayFormat.SingleLine(pathBox.Text.Trim(), 90));
             try
             {
                 ManagedFileType type = ((TypeItem)typeBox.SelectedItem).Type;
@@ -174,7 +179,11 @@ namespace ZyperWin__
                     pathBox.Text.Trim(),
                     type,
                     3000,
-                    new Progress<string>(message => status.Text = DisplayFormat.SingleLine(message, 180)),
+                    new Progress<string>(message =>
+                    {
+                        status.Text = DisplayFormat.SingleLine(message, 180);
+                        busyOverlay.UpdateMessage(DisplayFormat.SingleLine(message, 90));
+                    }),
                     cancellation.Token);
                 grid.Rows.Clear();
                 foreach (ManagedFileEntry file in files)
@@ -200,6 +209,7 @@ namespace ZyperWin__
             {
                 cancellation.Dispose();
                 cancellation = null;
+                busyOverlay.Stop();
                 if (!IsDisposed) SetBusy(false, false);
             }
         }

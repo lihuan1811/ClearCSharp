@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <Compile Include="BackupStore.cs" />
+    <Compile Include="BusyAnimationOverlay.cs" />
     <Compile Include="CleanupDashboard.cs" />
     <Compile Include="CleanupService.cs" />
     <Compile Include="CleanupWhitelist.cs" />

@@ -20,6 +20,7 @@ namespace ZyperWin__
         private readonly Button browseButton = UiFactory.SecondaryButton("选择目录");
         private readonly Button scanButton = UiFactory.PrimaryButton("开始扫描");
         private readonly Button upButton = UiFactory.SecondaryButton("上一级");
+        private readonly BusyAnimationOverlay busyOverlay = new BusyAnimationOverlay();
         private readonly Label status = UiFactory.StatusLabel("选择目录后开始扫描，扫描过程可取消。");
         private readonly ProgressBar progress = new ProgressBar();
         private CancellationTokenSource cancellation;
@@ -103,6 +104,9 @@ namespace ZyperWin__
             content.Panel1.Controls.Add(upper);
             treemap.Dock = DockStyle.Fill;
             content.Panel2.Controls.Add(treemap);
+            var contentHost = new Panel { Dock = DockStyle.Fill, BackColor = AppPalette.Canvas };
+            contentHost.Controls.Add(content);
+            busyOverlay.AttachTo(contentHost);
 
             var bottom = new TableLayoutPanel
             {
@@ -118,7 +122,7 @@ namespace ZyperWin__
             progress.Margin = new Padding(8, 4, 0, 4);
             bottom.Controls.Add(progress, 1, 0);
 
-            Controls.Add(content);
+            Controls.Add(contentHost);
             Controls.Add(bottom);
             Controls.Add(pathBar);
             Controls.Add(header);
@@ -200,11 +204,16 @@ namespace ZyperWin__
             cancellation = new CancellationTokenSource();
             SetBusy(true);
             status.Text = "正在扫描：" + path;
+            busyOverlay.Start("正在分析磁盘文件", DisplayFormat.SingleLine(path, 90));
             try
             {
                 analysis = await service.ScanAsync(
                     path,
-                    new Progress<string>(value => status.Text = DisplayFormat.SingleLine(value, 190)),
+                    new Progress<string>(value =>
+                    {
+                        status.Text = DisplayFormat.SingleLine(value, 190);
+                        busyOverlay.UpdateMessage(DisplayFormat.SingleLine(value, 90));
+                    }),
                     cancellation.Token);
                 currentNode = analysis.Root;
                 selectedExtension = null;
@@ -231,6 +240,7 @@ namespace ZyperWin__
             {
                 cancellation.Dispose();
                 cancellation = null;
+                busyOverlay.Stop();
                 SetBusy(false);
             }
         }

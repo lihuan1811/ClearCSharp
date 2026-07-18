@@ -16,6 +16,7 @@ namespace ZyperWin__
         private readonly DataGridView grid = UiFactory.Grid();
         private readonly DataGridView fileGrid = UiFactory.Grid();
         private readonly SplitContainer resultsSplit = new SplitContainer();
+        private readonly BusyAnimationOverlay busyOverlay = new BusyAnimationOverlay();
         private readonly Label status = UiFactory.StatusLabel("请选择清理模块，然后开始扫描。");
         private readonly ProgressBar progress = new ProgressBar();
         private readonly Button scanButton = UiFactory.PrimaryButton("扫描");
@@ -61,6 +62,9 @@ namespace ZyperWin__
             resultsSplit.SplitterDistance = 250;
             resultsSplit.Panel1.Controls.Add(grid);
             resultsSplit.Panel2.Controls.Add(fileGrid);
+            var resultsHost = new Panel { Dock = DockStyle.Fill, BackColor = AppPalette.Canvas };
+            resultsHost.Controls.Add(resultsSplit);
+            busyOverlay.AttachTo(resultsHost);
 
             var bottom = new TableLayoutPanel
             {
@@ -95,7 +99,7 @@ namespace ZyperWin__
             actions.Controls.Add(cleanButton);
             bottom.Controls.Add(actions, 1, 1);
 
-            Controls.Add(resultsSplit);
+            Controls.Add(resultsHost);
             Controls.Add(bottom);
             Controls.Add(header);
 
@@ -269,9 +273,14 @@ namespace ZyperWin__
             cancellation = new CancellationTokenSource();
             SetBusy(true, "取消扫描");
             progress.Style = ProgressBarStyle.Marquee;
+            busyOverlay.Start("正在扫描 C 盘", "正在读取清理规则和文件大小");
             try
             {
-                var reporter = new Progress<string>(value => status.Text = value);
+                var reporter = new Progress<string>(value =>
+                {
+                    status.Text = value;
+                    busyOverlay.UpdateMessage(DisplayFormat.SingleLine(value, 90));
+                });
                 IList<CleanupScanResult> results = await service.ScanAsync(CleanupKind.DriveC, reporter, cancellation.Token);
                 grid.Rows.Clear();
                 foreach (CleanupScanResult result in results)
@@ -319,6 +328,7 @@ namespace ZyperWin__
             {
                 cancellation.Dispose();
                 cancellation = null;
+                busyOverlay.Stop();
                 progress.Style = ProgressBarStyle.Blocks;
                 progress.Value = 0;
                 SetBusy(false, "扫描");
@@ -358,12 +368,17 @@ namespace ZyperWin__
             cancellation = new CancellationTokenSource();
             SetBusy(true, "取消清理");
             progress.Style = ProgressBarStyle.Marquee;
+            busyOverlay.Start("正在清理选中项", createBackup ? "正在备份并删除已确认文件" : "正在删除已确认文件");
             try
             {
                 CleanupResult result = await service.CleanAsync(
                     selected,
                     createBackup ? backupRoot : null,
-                    new Progress<string>(value => status.Text = value),
+                    new Progress<string>(value =>
+                    {
+                        status.Text = value;
+                        busyOverlay.UpdateMessage(DisplayFormat.SingleLine(value, 90));
+                    }),
                     cancellation.Token);
                 status.Text = string.Format(
                     "清理完成：删除 {0:N0} 个文件，释放 {1}，失败 {2:N0} 个。",
@@ -394,6 +409,7 @@ namespace ZyperWin__
                     cancellation.Dispose();
                     cancellation = null;
                 }
+                busyOverlay.Stop();
                 progress.Style = ProgressBarStyle.Blocks;
                 progress.Value = 0;
                 SetBusy(false, "扫描");
@@ -610,6 +626,7 @@ namespace ZyperWin__
             };
             cancellation = new CancellationTokenSource();
             SetBusy(true, "取消清理");
+            busyOverlay.Start("正在清理文件", DisplayFormat.SingleLine(path, 90));
             try
             {
                 CleanupResult result = await service.CleanAsync(new[] { one }, createBackup ? backupRoot : null, null, cancellation.Token);
@@ -635,6 +652,7 @@ namespace ZyperWin__
             {
                 cancellation.Dispose();
                 cancellation = null;
+                busyOverlay.Stop();
                 SetBusy(false, "扫描");
             }
         }

@@ -21,6 +21,7 @@ namespace CDriveCleaner.Tests
             Run("Cleanup catalog safety", TestCleanupCatalog);
             Run("Cleanup wildcard paths", TestCleanupWildcardPaths);
             Run("Cleanup per-file selection", TestCleanupFileSelection);
+            Run("Busy animation lifecycle", TestBusyAnimationLifecycle);
             Run("Final navigation contract", TestFinalNavigation);
             Run("Disk analysis", TestDiskAnalysis);
             Run("Managed file classification", TestManagedFiles);
@@ -190,6 +191,19 @@ namespace CDriveCleaner.Tests
             finally
             {
                 Directory.Delete(root, true);
+            }
+        }
+
+        private static void TestBusyAnimationLifecycle()
+        {
+            using (var overlay = new BusyAnimationOverlay())
+            {
+                Assert(!overlay.IsActive, "busy animation must start inactive");
+                overlay.Start("正在扫描", "测试路径");
+                Assert(overlay.IsActive, "busy animation did not start");
+                overlay.UpdateMessage("正在读取文件");
+                overlay.Stop();
+                Assert(!overlay.IsActive && !overlay.Visible, "busy animation did not stop cleanly");
             }
         }
 
