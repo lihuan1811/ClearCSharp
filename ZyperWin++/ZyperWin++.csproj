@@ -1,56 +1,30 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{2205F0F3-11B7-4D85-9C78-A6786E4A80B1}</ProjectGuid>
     <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>ZyperWin__</RootNamespace>
     <AssemblyName>C DiskGlow</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-    <LangVersion>7.3</LangVersion>
-    <FileAlignment>512</FileAlignment>
-    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <Deterministic>true</Deterministic>
     <ApplicationIcon>zw+.ico</ApplicationIcon>
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <Platforms>AnyCPU</Platforms>
+    <RuntimeIdentifiers>win-x64;win-x86</RuntimeIdentifiers>
+    <Deterministic>true</Deterministic>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <Prefer32Bit>false</Prefer32Bit>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <Prefer32Bit>false</Prefer32Bit>
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
+
   <ItemGroup>
-    <Reference Include="AntdUI, Version=2.1.3.0, Culture=neutral, PublicKeyToken=0e24e5118ea3d6af, processorArchitecture=MSIL">
-      <HintPath>..\packages\AntdUI.2.1.3\lib\net48\AntdUI.dll</HintPath>
-      <Private>false</Private>
+    <Reference Include="AntdUI">
+      <HintPath>..\packages\AntdUI.2.1.3\lib\net8.0-windows7.0\AntdUI.dll</HintPath>
+      <Private>true</Private>
     </Reference>
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Management" />
-    <Reference Include="System.ServiceProcess" />
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Xml" />
-    <Reference Include="System.Xml.Linq" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
   </ItemGroup>
+
   <ItemGroup>
     <Compile Include="BackupStore.cs" />
     <Compile Include="CleanupDashboard.cs" />
@@ -64,20 +38,17 @@
     <Compile Include="GpuDashboard.cs" />
     <Compile Include="GpuService.cs" />
     <Compile Include="Infrastructure.cs" />
+    <Compile Include="KnownFolderPaths.cs" />
     <Compile Include="LogDashboard.cs" />
-    <Compile Include="MainWindow.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Optimize.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
+    <Compile Include="MainWindow.cs" />
+    <Compile Include="ManagedFileService.cs" />
+    <Compile Include="MigrationDashboard.cs" />
+    <Compile Include="MigrationService.cs" />
+    <Compile Include="Optimize.cs" />
     <Compile Include="Optimize.Designer.cs">
       <DependentUpon>Optimize.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.cs" />
-    <Compile Include="ManagedFileService.cs" />
-    <Compile Include="MigrationDashboard.cs" />
-    <Compile Include="MigrationService.cs" />
     <Compile Include="RepairDashboard.cs" />
     <Compile Include="RestoreDialog.cs" />
     <Compile Include="SystemOptimizationDashboard.cs" />
@@ -85,47 +56,15 @@
     <Compile Include="UninstallDashboard.cs" />
     <Compile Include="UninstallService.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
-    <Compile Include="Properties\Settings.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Settings.settings</DependentUpon>
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-    </Compile>
   </ItemGroup>
+
   <ItemGroup>
     <EmbeddedResource Include="Optimize.resx">
       <DependentUpon>Optimize.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\packages\AntdUI.2.1.3\lib\net48\AntdUI.dll">
-      <Link>Embedded\AntdUI.dll</Link>
-      <LogicalName>CDiskGlow.Embedded.AntdUI.dll</LogicalName>
-    </EmbeddedResource>
     <EmbeddedResource Include="Bin\ZyperData.xml">
       <LogicalName>CDiskGlow.Embedded.ZyperData.xml</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <SubType>Designer</SubType>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="App.config" />
-    <None Include="packages.config" />
-    <None Include="Properties\app.manifest" />
-    <None Include="Properties\Settings.settings">
-      <Generator>SettingsSingleFileGenerator</Generator>
-      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-    </None>
-    <None Include="Resources\zw+.png" />
-    <Content Include="Bin\ZyperData.xml">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
     <Content Include="zw+.ico" />
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

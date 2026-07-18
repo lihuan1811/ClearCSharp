@@ -1,10 +1,10 @@
-# C DiskGlow (.NET Framework 4.8)
+# C DiskGlow (.NET 8 self-contained)
 
 Windows maintenance utility rebuilt from the cloned ZyperWin++ WinForms source.
 
 ## Final modules
 
-- `C盘深度清理`: five cleanup categories, scan-only high-risk rules, whitelist, backup and restore
+- `C盘深度清理`: system/app/cache/temp categories, dedicated WeChat/QQ scans, large package scans, whitelist, backup and restore
 - `软件强力卸载`: desktop/Store categories, search, batch/force uninstall, registry backup and residual cleanup
 - `系统智能优化`: directly integrated ZyperWin++ rules plus NVIDIA/AMD/Intel capability detection
 - `磁盘文件管理器`: drill-down treemap, extension filtering, batch file operations and seven system-directory migrations
@@ -21,8 +21,14 @@ ZyperWin++ changes made by this app are journaled for global restore.
 
 ## Build
 
-Open `ZyperWin++.sln` in Visual Studio 2022 and build `Release | Any CPU`, or run:
+Build and test with the .NET 8 SDK:
 
 ```powershell
-msbuild ZyperWin++.sln /m /p:Configuration=Release /p:Platform="Any CPU"
+dotnet restore ZyperWin++.sln
+dotnet build ZyperWin++.sln -c Release --no-restore
+dotnet run --project .\CDriveCleaner.Tests\CDriveCleaner.Tests.csproj -c Release --no-build
 ```
+
+GitHub Actions publishes separate `win-x64` and `win-x86` self-contained single
+executables. They include the .NET runtime and do not require a separate .NET
+installation on Windows 10 or Windows 11.

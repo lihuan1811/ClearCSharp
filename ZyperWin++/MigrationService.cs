@@ -93,11 +93,11 @@ namespace ZyperWin__
             string local = Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? Path.Combine(home, "AppData", "Local");
             return new List<MigrationFolder>
             {
-                Folder("desktop", "桌面", "Desktop", Path.Combine(home, "Desktop")),
-                Folder("documents", "我的文档", "Documents", Path.Combine(home, "Documents")),
-                Folder("downloads", "下载", "Downloads", Path.Combine(home, "Downloads")),
-                Folder("pictures", "我的图片", "Pictures", Path.Combine(home, "Pictures")),
-                Folder("videos", "我的视频", "Videos", Path.Combine(home, "Videos")),
+                Folder("desktop", "桌面", "Desktop", KnownFolderPaths.Desktop),
+                Folder("documents", "我的文档", "Documents", KnownFolderPaths.Documents),
+                Folder("downloads", "下载", "Downloads", KnownFolderPaths.Downloads),
+                Folder("pictures", "我的图片", "Pictures", KnownFolderPaths.Pictures),
+                Folder("videos", "我的视频", "Videos", KnownFolderPaths.Videos),
                 Folder("appdata_cache", "AppData 本地软件缓存（微信/QQ）", "AppData-Local-Tencent", Path.Combine(local, "Tencent")),
                 Folder("temp", "当前用户 Temp 临时文件夹", "User-Temp", Path.Combine(local, "Temp"))
             };
@@ -149,6 +149,7 @@ namespace ZyperWin__
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                EnsureFreeSpace(folder.SourcePath, target, "迁移目标磁盘", cancellationToken);
                 Directory.CreateDirectory(target);
                 if (sourceExisted)
                 {
@@ -208,6 +209,7 @@ namespace ZyperWin__
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!IsReparsePoint(record.SourcePath)) throw new IOException("原路径已不是本程序创建的目录连接，已停止还原。");
+                EnsureFreeSpace(record.TargetPath, record.SourcePath, "C盘原目录", cancellationToken);
                 FileOperationSummary removed = RemoveJunction(record.SourcePath, cancellationToken);
                 if (!removed.Success) throw new IOException(string.Join(Environment.NewLine, removed.Errors));
                 Directory.CreateDirectory(record.SourcePath);
@@ -265,8 +267,9 @@ namespace ZyperWin__
                 if (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
                     throw new IOException("迁移目标已存在内容，为避免混入旧文件和破坏回滚，未执行迁移：" + target);
                 if (File.Exists(target) || IsReparsePoint(target)) throw new IOException("迁移目标不是可用的普通目录：" + target);
-                string executable = Path.GetFullPath(System.Reflection.Assembly.GetExecutingAssembly().Location);
-                if (IsSameOrChild(executable, folder.SourcePath)) throw new IOException("本程序位于待迁移目录内，请先把程序移动到其它位置。");
+                string executable = Environment.ProcessPath;
+                if (!string.IsNullOrWhiteSpace(executable) && IsSameOrChild(executable, folder.SourcePath))
+                    throw new IOException("本程序位于待迁移目录内，请先把程序移动到其它位置。");
                 return true;
             }
             catch (Exception ex)
@@ -320,8 +323,11 @@ namespace ZyperWin__
                         }
                     }
                 }
+                string settingArea = folder.Key == "temp"
+                    ? "Environment"
+                    : @"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders";
                 UIntPtr ignored;
-                SendMessageTimeout(new IntPtr(HwndBroadcast), WmSettingChange, UIntPtr.Zero, "Environment", SmtoAbortIfHung, 3000, out ignored);
+                SendMessageTimeout(new IntPtr(HwndBroadcast), WmSettingChange, UIntPtr.Zero, settingArea, SmtoAbortIfHung, 3000, out ignored);
                 return true;
             }
             catch (Exception ex)
@@ -376,6 +382,55 @@ namespace ZyperWin__
                     File.Delete(destination);
                     throw;
                 }
+            }
+        }
+
+        private static void EnsureFreeSpace(string source, string destination, string destinationLabel, CancellationToken cancellationToken)
+        {
+            if (!Directory.Exists(source)) return;
+            long required = DirectorySize(source, cancellationToken);
+            string root = Path.GetPathRoot(Path.GetFullPath(destination));
+            var drive = new DriveInfo(root);
+            if (!drive.IsReady) throw new IOException(destinationLabel + "不可用。");
+            if (required > drive.AvailableFreeSpace)
+            {
+                throw new IOException(string.Format(
+                    "{0}空间不足：需要 {1}，当前可用 {2}。",
+                    destinationLabel,
+                    DisplayFormat.Bytes(required),
+                    DisplayFormat.Bytes(drive.AvailableFreeSpace)));
+            }
+        }
+
+        internal static void RunJunctionRoundTripSmokeTest(CancellationToken cancellationToken)
+        {
+            string token = Guid.NewGuid().ToString("N");
+            string source = Path.Combine(Path.GetTempPath(), "CDiskGlowMigrationSource_" + token);
+            string target = Path.Combine(Path.GetTempPath(), "CDiskGlowMigrationTarget_" + token);
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(source, "nested"));
+                File.WriteAllText(Path.Combine(source, "nested", "probe.txt"), "migration-round-trip", Encoding.UTF8);
+                MoveDirectoryContents(source, target, cancellationToken);
+                Directory.Delete(source, false);
+
+                FileOperationSummary created = CreateJunction(source, target, cancellationToken);
+                if (!created.Success || !File.Exists(Path.Combine(source, "nested", "probe.txt")))
+                    throw new IOException("迁移连接点创建后无法读取目标文件。");
+
+                FileOperationSummary removed = RemoveJunction(source, cancellationToken);
+                if (!removed.Success) throw new IOException(string.Join(Environment.NewLine, removed.Errors));
+                Directory.CreateDirectory(source);
+                MoveDirectoryContents(target, source, cancellationToken);
+                if (Directory.Exists(target) && !Directory.EnumerateFileSystemEntries(target).Any()) Directory.Delete(target, false);
+                if (File.ReadAllText(Path.Combine(source, "nested", "probe.txt"), Encoding.UTF8) != "migration-round-trip")
+                    throw new IOException("迁移还原后的文件内容不一致。");
+            }
+            finally
+            {
+                if (IsReparsePoint(source)) RemoveJunction(source, CancellationToken.None);
+                try { if (Directory.Exists(source)) Directory.Delete(source, true); } catch { }
+                try { if (Directory.Exists(target)) Directory.Delete(target, true); } catch { }
             }
         }
 

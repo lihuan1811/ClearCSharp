@@ -1,4 +1,4 @@
-name: Windows .NET Framework release
+name: Windows self-contained release
 
 on:
   push:
@@ -11,77 +11,104 @@ permissions:
 jobs:
   build-test-release:
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore "ZyperWin++.sln"
 
       - name: Build Release
         shell: pwsh
-        run: msbuild ZyperWin++.sln /m /t:Rebuild /p:Configuration=Release /p:Platform="Any CPU" /v:minimal
+        run: dotnet build "ZyperWin++.sln" -c Release --no-restore
 
       - name: Run regression tests
         shell: pwsh
-        run: .\CDriveCleaner.Tests\bin\Release\CDriveCleaner.Tests.exe
+        run: dotnet run --project ".\CDriveCleaner.Tests\CDriveCleaner.Tests.csproj" -c Release --no-build
 
-      - name: Run executable startup smoke test
+      - name: Publish self-contained executables
         shell: pwsh
         run: |
-          $process = Start-Process '.\ZyperWin++\bin\Release\C DiskGlow.exe' -ArgumentList '--smoke-test' -Wait -PassThru
-          if ($process.ExitCode -ne 0) {
-            if (Test-Path '.\smoke-test-trace.txt') {
-              Get-Content '.\smoke-test-trace.txt'
-            }
-            if (Test-Path '.\smoke-test-error.txt') {
-              Get-Content '.\smoke-test-error.txt'
-            }
-            throw "Executable smoke test failed with exit code $($process.ExitCode)."
-          }
-          if (-not (Test-Path '.\smoke-test-ok.txt')) {
-            throw "Executable smoke test did not write its success marker."
-          }
+          $common = @(
+            '.\ZyperWin++\ZyperWin++.csproj',
+            '-c', 'Release',
+            '--self-contained', 'true',
+            '-p:PublishSingleFile=true',
+            '-p:IncludeNativeLibrariesForSelfExtract=true',
+            '-p:EnableCompressionInSingleFile=true',
+            '-p:PublishTrimmed=false',
+            '-p:PublishReadyToRun=false',
+            '-p:DebugType=None',
+            '-p:DebugSymbols=false'
+          )
+          dotnet publish @common -r win-x64 -o '.\publish\win-x64'
+          dotnet publish @common -r win-x86 -o '.\publish\win-x86'
 
-      - name: Validate single-file executable
+      - name: Run published executable startup smoke tests
         shell: pwsh
         run: |
-          $exe = Get-Item '.\ZyperWin++\bin\Release\C DiskGlow.exe'
-          if ($exe.Length -lt 2500000) {
-            throw "Executable is too small; embedded AntdUI dependency is likely missing."
+          foreach ($rid in @('win-x64', 'win-x86')) {
+            Remove-Item '.\smoke-test-ok.txt', '.\smoke-test-error.txt', '.\smoke-test-trace.txt' -Force -ErrorAction SilentlyContinue
+            $exe = ".\publish\$rid\C DiskGlow.exe"
+            $process = Start-Process $exe -ArgumentList '--smoke-test' -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+              if (Test-Path '.\smoke-test-trace.txt') { Get-Content '.\smoke-test-trace.txt' }
+              if (Test-Path '.\smoke-test-error.txt') { Get-Content '.\smoke-test-error.txt' }
+              throw "$rid executable smoke test failed with exit code $($process.ExitCode)."
+            }
+            if (-not (Test-Path '.\smoke-test-ok.txt')) {
+              throw "$rid executable smoke test did not write its success marker."
+            }
           }
+
+      - name: Validate self-contained single-file executables
+        shell: pwsh
+        run: |
           $mt = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter mt.exe -Recurse |
             Sort-Object FullName -Descending |
             Select-Object -First 1
-          if (-not $mt) {
-            throw "Windows SDK manifest tool was not found."
+          if (-not $mt) { throw "Windows SDK manifest tool was not found." }
+          foreach ($rid in @('win-x64', 'win-x86')) {
+            $folder = ".\publish\$rid"
+            $exe = Get-Item "$folder\C DiskGlow.exe"
+            if ($exe.Length -lt 30000000) {
+              throw "$rid executable is too small to contain the .NET runtime: $($exe.Length) bytes."
+            }
+            $unexpected = Get-ChildItem $folder -File | Where-Object { $_.Extension -in @('.dll', '.deps.json', '.runtimeconfig.json') }
+            if ($unexpected) {
+              throw "$rid publish is not a single executable: $($unexpected.Name -join ', ')"
+            }
+            & $mt.FullName -nologo "-inputresource:$($exe.FullName);#1" "-out:embedded-$rid.manifest"
+            $manifest = Get-Content "embedded-$rid.manifest" -Raw
+            if ($manifest -notmatch 'requireAdministrator') {
+              throw "$rid administrator manifest was not embedded."
+            }
+            Write-Host "Validated $rid $($exe.Length) bytes"
           }
-          & $mt.FullName -nologo "-inputresource:$($exe.FullName);#1" -out:embedded.manifest
-          $manifest = Get-Content embedded.manifest -Raw
-          if ($manifest -notmatch 'requireAdministrator') {
-            throw "Administrator manifest was not embedded."
-          }
-          Write-Host "Validated $($exe.Name), $($exe.Length) bytes"
 
       - name: Package artifacts
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifacts | Out-Null
-          Copy-Item '.\ZyperWin++\bin\Release\C DiskGlow.exe' '.\artifacts\C-DiskGlow-net48.exe'
-          Compress-Archive -Path '.\ZyperWin++\bin\Release\*' -DestinationPath '.\artifacts\C-DiskGlow-net48-portable.zip'
-          Get-FileHash '.\artifacts\C-DiskGlow-net48.exe' -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash.ToLower())  C-DiskGlow-net48.exe" } |
-            Set-Content '.\artifacts\SHA256SUMS.txt' -Encoding ascii
-          Get-FileHash '.\artifacts\C-DiskGlow-net48-portable.zip' -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash.ToLower())  C-DiskGlow-net48-portable.zip" } |
-            Add-Content '.\artifacts\SHA256SUMS.txt' -Encoding ascii
+          Copy-Item '.\publish\win-x64\C DiskGlow.exe' '.\artifacts\C-DiskGlow-win-x64-self-contained.exe'
+          Copy-Item '.\publish\win-x86\C DiskGlow.exe' '.\artifacts\C-DiskGlow-win-x86-self-contained.exe'
+          Get-ChildItem '.\artifacts\*.exe' | Sort-Object Name | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)"
+          } | Set-Content '.\artifacts\SHA256SUMS.txt' -Encoding ascii
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: C-DiskGlow-net48-${{ github.run_number }}
+          name: C-DiskGlow-self-contained-${{ github.run_number }}
           path: artifacts/*
 
       - name: Publish GitHub release
@@ -90,5 +117,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "csharp-build-${{ github.run_number }}"
-          gh release create $tag artifacts/* --title "C DiskGlow .NET 4.8 build ${{ github.run_number }}" --notes "Windows .NET Framework 4.8 build. Includes a dependency-free single EXE and a portable ZIP."
+          $tag = "csharp-self-contained-${{ github.run_number }}"
+          gh release create $tag artifacts/* --title "C DiskGlow self-contained build ${{ github.run_number }}" --notes "Windows 10/11 self-contained single-file builds. No separate .NET installation is required. Choose x64 for normal 64-bit Windows or x86 for 32-bit Windows."

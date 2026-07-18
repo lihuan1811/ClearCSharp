@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -13,7 +12,6 @@ namespace ZyperWin__
         [STAThread]
         private static int Main(string[] args)
         {
-            AppDomain.CurrentDomain.AssemblyResolve += ResolveEmbeddedAssembly;
             try
             {
                 return RunApplication(args);
@@ -30,13 +28,12 @@ namespace ZyperWin__
 
         private static int RunApplication(string[] args)
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
+            ApplicationConfiguration.Initialize();
             if (Array.Exists(args ?? new string[0], value => string.Equals(value, "--smoke-test", StringComparison.OrdinalIgnoreCase)))
                 return RunSmokeTest();
 
             bool createdNew;
-            singleInstance = new Mutex(true, "CDiskGlow_Net48_SingleInstance", out createdNew);
+            singleInstance = new Mutex(true, "CDiskGlow_Net8_SingleInstance", out createdNew);
             if (!createdNew)
             {
                 MessageBox.Show("C DiskGlow 已经在运行中。", "C DiskGlow", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -97,6 +94,8 @@ namespace ZyperWin__
                     }
                     TraceSmoke(moduleNames[index] + "-disposed");
                 }
+                MigrationService.RunJunctionRoundTripSmokeTest(CancellationToken.None);
+                TraceSmoke("migration-junction-round-trip-passed");
                 TraceSmoke("complete");
                 File.WriteAllText("smoke-test-ok.txt", "C DiskGlow module construction passed.");
                 return 0;
@@ -120,26 +119,5 @@ namespace ZyperWin__
             catch { }
         }
 
-        private static Assembly ResolveEmbeddedAssembly(object sender, ResolveEventArgs args)
-        {
-            var requested = new AssemblyName(args.Name);
-            if (!string.Equals(requested.Name, "AntdUI", StringComparison.OrdinalIgnoreCase)) return null;
-
-            using (Stream stream = Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("CDiskGlow.Embedded.AntdUI.dll"))
-            {
-                if (stream == null) return null;
-                if (stream.Length > int.MaxValue) return null;
-                var bytes = new byte[(int)stream.Length];
-                int offset = 0;
-                while (offset < bytes.Length)
-                {
-                    int read = stream.Read(bytes, offset, bytes.Length - offset);
-                    if (read <= 0) break;
-                    offset += read;
-                }
-                return Assembly.Load(bytes);
-            }
-        }
     }
 }

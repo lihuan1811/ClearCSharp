@@ -17,6 +17,7 @@ namespace ZyperWin__
         private readonly Button scanButton = UiFactory.PrimaryButton("扫描");
         private readonly Button cleanButton = UiFactory.SecondaryButton("清理选中");
         private readonly Button selectRecommendedButton = UiFactory.SecondaryButton("默认");
+        private readonly Button selectAllButton = UiFactory.SecondaryButton("全选");
         private readonly Button selectNoneButton = UiFactory.SecondaryButton("全不选");
         private readonly Button refreshButton = UiFactory.SecondaryButton("刷新");
         private readonly Button addWhitelistButton = UiFactory.SecondaryButton("添加白名单");
@@ -35,6 +36,7 @@ namespace ZyperWin__
                 "按过期文件、系统相关、缓存、应用和临时文件细分；高风险目录只分析。",
                 out headerActions);
             selectNoneButton.Width = 82;
+            selectAllButton.Width = 82;
             selectRecommendedButton.Width = 82;
             refreshButton.Width = 82;
             addWhitelistButton.Width = 100;
@@ -43,6 +45,7 @@ namespace ZyperWin__
             headerActions.Controls.Add(addWhitelistButton);
             headerActions.Controls.Add(refreshButton);
             headerActions.Controls.Add(selectNoneButton);
+            headerActions.Controls.Add(selectAllButton);
             headerActions.Controls.Add(selectRecommendedButton);
 
             ConfigureGrid();
@@ -87,6 +90,7 @@ namespace ZyperWin__
             scanButton.Click += async delegate { await ScanAsync(); };
             cleanButton.Click += async delegate { await CleanAsync(); };
             selectRecommendedButton.Click += delegate { SelectRecommended(); };
+            selectAllButton.Click += delegate { SelectAll(); };
             selectNoneButton.Click += delegate { SelectNone(); };
             refreshButton.Click += delegate { PopulateRules(); };
             addWhitelistButton.Click += AddWhitelistButton_Click;
@@ -323,11 +327,31 @@ namespace ZyperWin__
             }
         }
 
+        private void SelectAll()
+        {
+            if (MessageBox.Show(
+                "全选会包含谨慎操作项，例如聊天媒体、接收文件、Cookies 和大型安装包。高风险仅分析项仍不会删除。\n\n是否继续？",
+                "确认全选",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            foreach (DataGridViewRow row in grid.Rows)
+            {
+                CleanupRule rule = row.Tag as CleanupRule;
+                if (rule == null)
+                {
+                    CleanupScanResult result = row.Tag as CleanupScanResult;
+                    rule = result?.Rule;
+                }
+                row.Cells["Selected"].Value = rule != null && !rule.ScanOnly;
+            }
+        }
+
         private void SetBusy(bool busy, string scanText)
         {
             scanButton.Text = scanText;
             cleanButton.Enabled = !busy;
             selectRecommendedButton.Enabled = !busy;
+            selectAllButton.Enabled = !busy;
             selectNoneButton.Enabled = !busy;
             refreshButton.Enabled = !busy;
             addWhitelistButton.Enabled = !busy;

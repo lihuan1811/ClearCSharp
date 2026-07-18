@@ -24,6 +24,7 @@ namespace ZyperWin__
         public bool Recommended { get; set; }
         public bool ScanOnly { get; set; }
         public int MinimumAgeDays { get; set; }
+        public long MinimumBytes { get; set; }
         public List<string> PathTemplates { get; set; }
     }
 
@@ -99,6 +100,12 @@ namespace ZyperWin__
                     "%LOCALAPPDATA%\\Tencent\\QQBrowser\\User Data\\*\\Cache"),
                 Rule("缓存文件", "store-cache", "Microsoft Store 缓存", "商城应用产生的本地缓存目录。", "安全", true, false, 0, null,
                     "%LOCALAPPDATA%\\Packages\\Microsoft.WindowsStore_*\\LocalCache"),
+                Rule("缓存文件", "terminal-cache", "Terminal Server Client 缓存", "远程桌面客户端生成的位图缓存。", "安全", true, false, 0, null,
+                    "%LOCALAPPDATA%\\Microsoft\\Terminal Server Client\\Cache"),
+                Rule("缓存文件", "wininet-cache", "WinINet 网页缓存", "Windows 旧式网页组件生成的可再生缓存。", "安全", true, false, 0, null,
+                    "%LOCALAPPDATA%\\Microsoft\\Windows\\INetCache"),
+                Rule("缓存文件", "wininet-cookies", "WinINet Cookies", "可能包含网站登录状态，默认不勾选。", "谨慎", false, false, 0, null,
+                    "%LOCALAPPDATA%\\Microsoft\\Windows\\INetCookies"),
                 Rule("缓存文件", "onedrive-logs", "OneDrive 日志缓存", "OneDrive 诊断日志与可再生缓存。", "安全", true, false, 0, new[] { "*.log", "*.etl", "*.tmp" },
                     "%LOCALAPPDATA%\\Microsoft\\OneDrive\\logs"),
                 Rule("缓存文件", "thumbnails", "缩略图缓存", "资源管理器生成的缩略图数据库。", "安全", true, false, 0, new[] { "thumbcache_*.db" },
@@ -113,12 +120,57 @@ namespace ZyperWin__
                 Rule("应用程序", "adobe-cache", "Adobe 应用缓存", "Adobe 媒体缓存和临时数据。", "安全", false, false, 7, null,
                     "%APPDATA%\\Adobe\\Common\\Media Cache", "%APPDATA%\\Adobe\\Common\\Media Cache Files"),
 
+                Rule("微信缓存专清", "wechat-cache", "微信缓存与小程序临时文件", "微信可再生成的 Cache、Temp 和 Applet 内容。", "安全", true, false, 0, null,
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "FileStorage", "Cache"),
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "FileStorage", "Temp"),
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "FileStorage", "Applet"),
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "*", "FileStorage", "Cache"),
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "*", "FileStorage", "Temp"),
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "*", "FileStorage", "Applet"),
+                    Path.Combine(KnownFolderPaths.Documents, "xwechat_files", "cache"),
+                    Path.Combine(KnownFolderPaths.Documents, "xwechat_files", "*", "cache"),
+                    "%LOCALAPPDATA%\\Tencent\\WeChat\\Cache", "%LOCALAPPDATA%\\Tencent\\WeChat\\*\\Cache",
+                    "%APPDATA%\\Tencent\\WeChat\\Cache", "%APPDATA%\\Tencent\\WeChat\\*\\Cache"),
+                Rule("微信缓存专清", "wechat-media", "微信图片、视频与接收文件", "删除后本地接收的媒体和文件可能无法离线查看，默认不勾选。", "谨慎", false, false, 0, null,
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "*", "FileStorage", "Image"),
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "*", "FileStorage", "Video"),
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "*", "FileStorage", "File"),
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "*", "FileStorage", "MsgAttach"),
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "*", "Msg", "Audio")),
+                Rule("微信缓存专清", "wechat-records", "微信本地聊天记录（仅分析）", "本地聊天数据库和备份不可直接清理，只统计空间。", "高风险", false, true, 0, null,
+                    Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "*", "Msg"),
+                    Path.Combine(KnownFolderPaths.Documents, "xwechat_files", "*", "msg")),
+
+                Rule("QQ缓存专清", "qq-cache", "QQ 图片、短视频与空间缓存", "QQ/QQNT 账号目录中的图片、视频和可再生缓存。", "安全", true, false, 0, null,
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "Image"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "Video"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "ShortVideo"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "Cache"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "Image"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "Video"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "ShortVideo"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "Cache"),
+                    "%LOCALAPPDATA%\\Tencent\\QQNT\\Cache", "%LOCALAPPDATA%\\Tencent\\QQNT\\*\\Cache",
+                    "%APPDATA%\\Tencent\\QQ\\Cache", "%APPDATA%\\Tencent\\QQ\\*\\Cache"),
+                Rule("QQ缓存专清", "qq-received", "QQ 接收文件与安装包", "删除后本地接收文件会丢失，默认不勾选。", "谨慎", false, false, 0, null,
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "FileRecv")),
+                Rule("QQ缓存专清", "qq-records", "QQ 本地聊天记录（仅分析）", "QQ 本地消息数据库不可直接清理，只统计空间。", "高风险", false, true, 0, null,
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "Msg2.0"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "Msg3.0"),
+                    "%LOCALAPPDATA%\\Tencent\\QQNT\\*\\nt_db"),
+
+                MinimumSize(
+                    Rule("应用程序", "large-packages", "C盘大型安装包、压缩包与镜像", "扫描常用个人目录中超过 50 MB 的安装包、压缩包和镜像，默认不勾选。", "谨慎", false, false, 0,
+                        new[] { "*.exe", "*.msi", "*.msix", "*.appx", "*.zip", "*.rar", "*.7z", "*.iso", "*.img" },
+                        KnownFolderPaths.Downloads, KnownFolderPaths.Desktop, KnownFolderPaths.Documents),
+                    50L * 1024L * 1024L),
+
                 Rule("临时文件", "user-temp", "用户临时文件", "当前用户 TEMP 目录中的临时文件。", "安全", true, false, 0, null,
                     "%TEMP%"),
                 Rule("临时文件", "windows-temp", "Windows 临时文件", "Windows Temp 中未被系统占用的临时文件。", "安全", true, false, 0, null,
                     "%WINDIR%\\Temp"),
                 Rule("临时文件", "download-remnants", "下载未完成残留", "下载目录中超过 7 天的临时下载片段。", "安全", true, false, 7,
-                    new[] { "*.crdownload", "*.part", "*.download", "*.tmp" }, "%USERPROFILE%\\Downloads"),
+                    new[] { "*.crdownload", "*.part", "*.download", "*.tmp" }, KnownFolderPaths.Downloads),
                 Rule("临时文件", "recycle-bin", "回收站（仅分析）", "回收站内容可能仍需恢复，本工具只统计并交由系统界面清理。", "谨慎", false, true, 0, null,
                     "%SystemDrive%\\$Recycle.Bin")
             };
@@ -150,6 +202,12 @@ namespace ZyperWin__
                 MinimumAgeDays = minimumAgeDays,
                 PathTemplates = paths.ToList()
             };
+        }
+
+        private static CleanupRule MinimumSize(CleanupRule rule, long minimumBytes)
+        {
+            rule.MinimumBytes = minimumBytes;
+            return rule;
         }
     }
 
@@ -264,6 +322,10 @@ namespace ZyperWin__
             try { full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar); }
             catch { return false; }
 
+            string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows));
+            if (string.IsNullOrWhiteSpace(systemRoot) ||
+                !string.Equals(Path.GetPathRoot(full), systemRoot, StringComparison.OrdinalIgnoreCase)) return false;
+
             string[] protectedPaths =
             {
                 Environment.GetEnvironmentVariable("SystemDrive") + Path.DirectorySeparatorChar,
@@ -286,7 +348,7 @@ namespace ZyperWin__
             return full.Split(Path.DirectorySeparatorChar).Length >= 2;
         }
 
-        private static IEnumerable<string> ResolveRoots(string template)
+        internal static IEnumerable<string> ResolveRoots(string template)
         {
             string expanded = Environment.ExpandEnvironmentVariables(template);
             if (expanded.IndexOf('*') < 0 && expanded.IndexOf('?') < 0)
@@ -372,6 +434,7 @@ namespace ZyperWin__
                 var info = new FileInfo(file);
                 if (!info.Exists) return;
                 if (rule.MinimumAgeDays > 0 && info.LastWriteTimeUtc > DateTime.UtcNow.AddDays(-rule.MinimumAgeDays)) return;
+                if (rule.MinimumBytes > 0 && info.Length < rule.MinimumBytes) return;
                 result.Files.Add(file);
                 result.FileCount++;
                 result.Bytes += info.Length;

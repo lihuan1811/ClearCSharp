@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Xml.Linq;
 using ZyperWin__;
@@ -17,6 +18,7 @@ namespace CDriveCleaner.Tests
             Run("Windows command output encoding", TestCommandOutputEncoding);
             Run("Uninstall command parsing", TestCommandParsing);
             Run("Cleanup catalog safety", TestCleanupCatalog);
+            Run("Cleanup wildcard paths", TestCleanupWildcardPaths);
             Run("Final navigation contract", TestFinalNavigation);
             Run("Disk analysis", TestDiskAnalysis);
             Run("Managed file classification", TestManagedFiles);
@@ -81,11 +83,16 @@ namespace CDriveCleaner.Tests
             }
 
             var driveRules = CleanupCatalog.GetRules(CleanupKind.DriveC);
-            string[] expectedCategories = { "过期文件", "系统相关", "缓存文件", "应用程序", "临时文件" };
+            string[] expectedCategories = { "过期文件", "系统相关", "缓存文件", "应用程序", "临时文件", "微信缓存专清", "QQ缓存专清" };
             Assert(driveRules.Select(rule => rule.Category).Distinct().OrderBy(value => value)
                 .SequenceEqual(expectedCategories.OrderBy(value => value)), "cleanup categories no longer match the final PRD");
             Assert(driveRules.Any(rule => rule.ScanOnly && rule.Name.Contains("WinSxS")), "high-risk WinSxS paths must remain scan-only");
-            Assert(driveRules.All(rule => !rule.Name.Contains("QQ专清") && !rule.Name.Contains("微信专清")), "removed dedicated cleaners returned");
+            Assert(driveRules.Any(rule => rule.Id == "wechat-cache" && rule.Recommended), "WeChat safe cache rule is missing");
+            Assert(driveRules.Any(rule => rule.Id == "wechat-records" && rule.ScanOnly), "WeChat records must remain scan-only");
+            Assert(driveRules.Any(rule => rule.Id == "qq-cache" && rule.Recommended), "QQ safe cache rule is missing");
+            Assert(driveRules.Any(rule => rule.Id == "qq-records" && rule.ScanOnly), "QQ records must remain scan-only");
+            Assert(driveRules.Any(rule => rule.Id == "large-packages" && rule.MinimumBytes == 50L * 1024L * 1024L),
+                "large installer/archive/image scan rule is missing or has the wrong threshold");
 
             string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             Assert(!CleanupService.IsSafeCleanupRoot(user), "user profile root must be protected");
@@ -101,6 +108,27 @@ namespace CDriveCleaner.Tests
             finally
             {
                 Directory.Delete(whitelistRoot, true);
+            }
+        }
+
+        private static void TestCleanupWildcardPaths()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "CDiskGlowCleanupRoots_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(root, "account-a", "Cache"));
+            Directory.CreateDirectory(Path.Combine(root, "account-b", "Cache"));
+            try
+            {
+                string[] resolved = CleanupService.ResolveRoots(Path.Combine(root, "*", "Cache")).OrderBy(value => value).ToArray();
+                Assert(resolved.Length == 2, "account wildcard did not resolve all cache roots");
+                Assert(resolved.All(Directory.Exists), "resolved cleanup root does not exist");
+
+                string expectedDownloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                Assert(KnownFolderPaths.ResolveValue(@"%USERPROFILE%\Downloads", string.Empty) == Path.GetFullPath(expectedDownloads),
+                    "known-folder environment variables were not expanded");
+            }
+            finally
+            {
+                Directory.Delete(root, true);
             }
         }
 
@@ -143,6 +171,10 @@ namespace CDriveCleaner.Tests
             Assert(folders.Select(folder => folder.Key).OrderBy(value => value).SequenceEqual(expected.OrderBy(value => value)),
                 "migration catalog keys do not match the final PRD");
             Assert(folders.All(folder => !string.IsNullOrWhiteSpace(folder.SourcePath)), "migration source path is empty");
+            Assert(folders.Single(folder => folder.Key == "desktop").SourcePath == KnownFolderPaths.Desktop,
+                "desktop migration must use the real User Shell Folders path");
+            Assert(folders.Single(folder => folder.Key == "downloads").SourcePath == KnownFolderPaths.Downloads,
+                "downloads migration must use the real User Shell Folders path");
         }
 
         private static void TestDiskAnalysis()
@@ -169,9 +201,9 @@ namespace CDriveCleaner.Tests
 
         private static void TestOptimizationData()
         {
-            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Bin", "ZyperData.xml");
-            Assert(File.Exists(path), "ZyperData.xml was not copied to test output");
-            XDocument document = XDocument.Load(path);
+            using Stream stream = typeof(CleanupCatalog).Assembly.GetManifestResourceStream("CDiskGlow.Embedded.ZyperData.xml");
+            Assert(stream != null, "ZyperData.xml was not embedded in the application");
+            XDocument document = XDocument.Load(stream);
             var items = document.Descendants("Item").ToList();
             Assert(items.Count > 100, "optimization catalog is unexpectedly incomplete");
             Assert(items.All(item => item.Element("Optimize") != null), "an optimization entry has no Optimize section");

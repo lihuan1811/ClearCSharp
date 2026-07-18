@@ -38,6 +38,11 @@ namespace ZyperWin__
 
     public static class ProcessRunner
     {
+        static ProcessRunner()
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        }
+
         public static Task<ProcessResult> RunAsync(
             string fileName,
             string arguments,
