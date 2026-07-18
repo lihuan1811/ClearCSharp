@@ -44,6 +44,7 @@ namespace ZyperWin__
         public int DeletedFiles { get; set; }
         public int FailedFiles { get; set; }
         public int SkippedFiles { get; set; }
+        public List<string> Errors { get; set; } = new List<string>();
     }
 
     public static class CleanupCatalog
@@ -142,17 +143,18 @@ namespace ZyperWin__
                     Path.Combine(KnownFolderPaths.Documents, "WeChat Files", "*", "Msg"),
                     Path.Combine(KnownFolderPaths.Documents, "xwechat_files", "*", "msg")),
 
-                Rule("QQ缓存专清", "qq-cache", "QQ 图片、短视频与空间缓存", "QQ/QQNT 账号目录中的图片、视频和可再生缓存。", "安全", true, false, 0, null,
-                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "Image"),
-                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "Video"),
-                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "ShortVideo"),
+                Rule("QQ缓存专清", "qq-cache", "QQ/QQNT 可再生缓存", "QQ/QQNT 的 Cache 临时内容，不包含图片、视频、接收文件和聊天记录。", "安全", true, false, 0, null,
                     Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "Cache"),
-                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "Image"),
-                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "Video"),
-                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "ShortVideo"),
                     Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "Cache"),
                     "%LOCALAPPDATA%\\Tencent\\QQNT\\Cache", "%LOCALAPPDATA%\\Tencent\\QQNT\\*\\Cache",
                     "%APPDATA%\\Tencent\\QQ\\Cache", "%APPDATA%\\Tencent\\QQ\\*\\Cache"),
+                Rule("QQ缓存专清", "qq-media", "QQ 图片、视频与短视频", "删除后本地媒体可能无法离线查看，默认不勾选。", "谨慎", false, false, 0, null,
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "Image"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "Video"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "ShortVideo"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "Image"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "Video"),
+                    Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "ShortVideo")),
                 Rule("QQ缓存专清", "qq-received", "QQ 接收文件与安装包", "删除后本地接收文件会丢失，默认不勾选。", "谨慎", false, false, 0, null,
                     Path.Combine(KnownFolderPaths.Documents, "Tencent Files", "*", "FileRecv")),
                 Rule("QQ缓存专清", "qq-records", "QQ 本地聊天记录（仅分析）", "QQ 本地消息数据库不可直接清理，只统计空间。", "高风险", false, true, 0, null,
@@ -295,6 +297,9 @@ namespace ZyperWin__
                 if (createBackup) BackupStore.Prune(5000, 1024L * 1024L * 1024L, backupRoot);
                 foreach (CleanupScanResult item in selected)
                 {
+                    int deletedBefore = result.DeletedFiles;
+                    int failedBefore = result.FailedFiles;
+                    long bytesBefore = result.Bytes;
                     if (item.Rule.ScanOnly)
                     {
                         result.SkippedFiles += item.FileCount;
@@ -314,6 +319,7 @@ namespace ZyperWin__
                             if (createBackup && !BackupStore.TryBackup(file, backupRoot, out backup, out backupError))
                             {
                                 result.FailedFiles++;
+                                result.Errors.Add(file + "：" + backupError);
                                 OperationLogger.Error("清理备份", backupError);
                                 continue;
                             }
@@ -322,9 +328,12 @@ namespace ZyperWin__
                             result.DeletedFiles++;
                             result.Bytes += length;
                         }
-                        catch
+                        catch (Exception ex)
                         {
                             result.FailedFiles++;
+                            string message = file + "：" + ex.Message;
+                            result.Errors.Add(message);
+                            OperationLogger.Error("清理文件", message);
                         }
                     }
 
@@ -336,7 +345,13 @@ namespace ZyperWin__
                     if (progress != null) progress.Report("已完成：" + item.Rule.Name);
                     OperationLogger.Info(
                         "清理",
-                        string.Format("{0}，扫描 {1} 个文件，释放 {2}", item.Rule.Name, item.FileCount, DisplayFormat.Bytes(item.Bytes)));
+                        string.Format(
+                            "{0}，请求 {1} 个文件，实际删除 {2} 个，释放 {3}，失败 {4} 个",
+                            item.Rule.Name,
+                            item.Files.Count,
+                            result.DeletedFiles - deletedBefore,
+                            DisplayFormat.Bytes(result.Bytes - bytesBefore),
+                            result.FailedFiles - failedBefore));
                 }
                 return result;
             }, cancellationToken);

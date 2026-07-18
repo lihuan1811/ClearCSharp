@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,6 +14,7 @@ namespace ZyperWin__
         public string FullPath { get; set; }
         public bool IsDirectory { get; set; }
         public long Size { get; set; }
+        public long PhysicalSize { get; set; }
         public long FileCount { get; set; }
         public DateTime LastWriteTime { get; set; }
         public List<DiskNode> Children { get; set; }
@@ -37,6 +39,7 @@ namespace ZyperWin__
     {
         public string Extension { get; set; }
         public long Bytes { get; set; }
+        public long PhysicalBytes { get; set; }
         public long FileCount { get; set; }
     }
 
@@ -50,6 +53,9 @@ namespace ZyperWin__
 
     public sealed class DiskAnalysisService
     {
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern uint GetCompressedFileSize(string fileName, out uint fileSizeHigh);
+
         private sealed class ScanState
         {
             public readonly Dictionary<string, ExtensionUsage> Extensions =
@@ -126,11 +132,13 @@ namespace ZyperWin__
                     FullPath = file.FullName,
                     IsDirectory = false,
                     Size = length,
+                    PhysicalSize = ReadPhysicalSize(file.FullName, length),
                     FileCount = 1,
                     LastWriteTime = SafeLastWrite(file)
                 };
                 node.Children.Add(fileNode);
                 node.Size += length;
+                node.PhysicalSize += fileNode.PhysicalSize;
                 node.FileCount++;
                 AddExtension(state, fileNode);
                 AddLargestFile(state, fileNode);
@@ -157,6 +165,7 @@ namespace ZyperWin__
                     DiskNode childNode = ScanDirectory(child, state, progress, cancellationToken);
                     node.Children.Add(childNode);
                     node.Size += childNode.Size;
+                    node.PhysicalSize += childNode.PhysicalSize;
                     node.FileCount += childNode.FileCount;
                 }
                 catch (OperationCanceledException)
@@ -183,6 +192,7 @@ namespace ZyperWin__
                 state.Extensions[extension] = usage;
             }
             usage.Bytes += file.Size;
+            usage.PhysicalBytes += file.PhysicalSize;
             usage.FileCount++;
         }
 
@@ -206,6 +216,17 @@ namespace ZyperWin__
         {
             try { return info.LastWriteTime; }
             catch { return DateTime.MinValue; }
+        }
+
+        internal static long ReadPhysicalSize(string path, long fallbackLength)
+        {
+            uint high;
+            Marshal.SetLastPInvokeError(0);
+            uint low = GetCompressedFileSize(path, out high);
+            int error = Marshal.GetLastWin32Error();
+            if (low == uint.MaxValue && error != 0) return fallbackLength;
+            ulong value = ((ulong)high << 32) | low;
+            return value > long.MaxValue ? fallbackLength : (long)value;
         }
     }
 }

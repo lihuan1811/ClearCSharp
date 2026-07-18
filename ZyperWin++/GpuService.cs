@@ -1,3 +1,4 @@
+using LibreHardwareMonitor.Hardware;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -75,11 +76,27 @@ namespace ZyperWin__
         [DllImport("kernel32.dll")]
         private static extern bool FreeLibrary(IntPtr module);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate IntPtr NvApiQueryInterfaceDelegate(uint interfaceId);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate int NvApiFunctionDelegate();
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate int AdlxQueryFullVersionDelegate(out ulong fullVersion);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate int AdlxInitializeDelegate(ulong version, out IntPtr systemServices);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate int AdlxTerminateDelegate();
+
         public Task<IList<GpuInfo>> DetectAsync(CancellationToken cancellationToken)
         {
             return Task.Run<IList<GpuInfo>>(() =>
             {
                 var items = ReadWmi(cancellationToken);
+                EnrichHardwareSensors(items, cancellationToken);
                 EnrichNvidia(items, cancellationToken);
                 DetectOfficialEntries(items);
                 DetectSafeOperations(items, cancellationToken);
@@ -120,6 +137,111 @@ namespace ZyperWin__
                 }
             }
             return result;
+        }
+
+        private static void EnrichHardwareSensors(IList<GpuInfo> items, CancellationToken cancellationToken)
+        {
+            var computer = new Computer { IsGpuEnabled = true };
+            var matched = new HashSet<GpuInfo>();
+            try
+            {
+                computer.Open();
+                foreach (IHardware hardware in computer.Hardware)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    GpuVendor vendor = VendorFromHardwareType(hardware.HardwareType);
+                    if (vendor == GpuVendor.Unknown) continue;
+                    hardware.Update();
+
+                    GpuInfo target = FindSensorTarget(items, matched, vendor, hardware.Name);
+                    if (target == null)
+                    {
+                        target = new GpuInfo { Name = hardware.Name, Vendor = vendor };
+                        items.Add(target);
+                    }
+                    matched.Add(target);
+
+                    ISensor temperature = PreferredSensor(hardware.Sensors, SensorType.Temperature, "GPU Core");
+                    ISensor utilization = PreferredSensor(hardware.Sensors, SensorType.Load, "GPU Core", "D3D 3D");
+                    ISensor memoryUsed = PreferredSensor(hardware.Sensors, SensorType.SmallData, "GPU Memory Used", "D3D Dedicated Memory Used");
+                    ISensor memoryTotal = PreferredSensor(hardware.Sensors, SensorType.SmallData, "GPU Memory Total", "D3D Dedicated Memory Total");
+
+                    if (temperature != null) target.TemperatureCelsius = ClampPercentOrTemperature(temperature.Value.Value, -100, 300);
+                    if (utilization != null) target.UtilizationPercent = ClampPercentOrTemperature(utilization.Value.Value, 0, 100);
+                    if (memoryUsed != null && memoryUsed.Value.Value >= 0)
+                        target.UsedMemoryBytes = (long)(memoryUsed.Value.Value * 1024f * 1024f);
+                    if (memoryTotal != null && memoryTotal.Value.Value > 0)
+                        target.DedicatedMemoryBytes = (long)(memoryTotal.Value.Value * 1024f * 1024f);
+
+                    if (temperature != null || utilization != null || memoryUsed != null)
+                        AddSupportedOperation(target, "读取真实温度、负载与显存传感器");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                OperationLogger.Info("显卡检测", "硬件传感器接口不可用：" + ex.Message);
+            }
+            finally
+            {
+                try { computer.Close(); } catch { }
+            }
+        }
+
+        private static GpuInfo FindSensorTarget(IList<GpuInfo> items, ISet<GpuInfo> matched, GpuVendor vendor, string hardwareName)
+        {
+            List<GpuInfo> candidates = items.Where(value => value.Vendor == vendor && !matched.Contains(value)).ToList();
+            if (candidates.Count == 0) candidates = items.Where(value => value.Vendor == vendor).ToList();
+            return candidates
+                .OrderByDescending(value => DeviceNameScore(value.Name, hardwareName))
+                .FirstOrDefault();
+        }
+
+        private static int DeviceNameScore(string left, string right)
+        {
+            string first = NormalizeDeviceName(left);
+            string second = NormalizeDeviceName(right);
+            if (first.Length == 0 || second.Length == 0) return 0;
+            if (first.Contains(second) || second.Contains(first)) return 1000 + Math.Min(first.Length, second.Length);
+            return first.Split(' ').Where(token => token.Length > 1 && second.Contains(token)).Sum(token => token.Length);
+        }
+
+        private static string NormalizeDeviceName(string value)
+        {
+            return Regex.Replace((value ?? string.Empty).ToLowerInvariant(), @"\b(nvidia|amd|intel|corporation|graphics|gpu)\b", " ")
+                .Replace("(r)", string.Empty)
+                .Replace("(tm)", string.Empty)
+                .Trim();
+        }
+
+        private static ISensor PreferredSensor(IEnumerable<ISensor> sensors, SensorType type, params string[] preferredNames)
+        {
+            List<ISensor> available = sensors.Where(value => value.SensorType == type && value.Value.HasValue).ToList();
+            foreach (string name in preferredNames)
+            {
+                ISensor exact = available.FirstOrDefault(value => string.Equals(value.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (exact != null) return exact;
+            }
+            return available.FirstOrDefault();
+        }
+
+        private static int ClampPercentOrTemperature(float value, int minimum, int maximum)
+        {
+            return Math.Max(minimum, Math.Min(maximum, Convert.ToInt32(Math.Round(value))));
+        }
+
+        private static GpuVendor VendorFromHardwareType(HardwareType type)
+        {
+            switch (type)
+            {
+                case HardwareType.GpuNvidia: return GpuVendor.Nvidia;
+                case HardwareType.GpuAmd: return GpuVendor.Amd;
+                case HardwareType.GpuIntel: return GpuVendor.Intel;
+                default: return GpuVendor.Unknown;
+            }
         }
 
         private static void EnrichNvidia(IList<GpuInfo> items, CancellationToken cancellationToken)
@@ -165,18 +287,19 @@ namespace ZyperWin__
                 if (int.TryParse(fields[6], out utilization)) target.UtilizationPercent = utilization;
                 target.DriverVersion = fields[2];
                 target.NvidiaSmiAvailable = true;
-                target.SupportedOperations.Add("读取温度、负载与显存占用");
-                target.SupportedOperations.Add("生成 NVIDIA 状态报告");
+                AddSupportedOperation(target, "通过 nvidia-smi 读取温度、负载与显存占用");
+                AddSupportedOperation(target, "生成 NVIDIA 状态报告");
             }
 
+            string nvapiName = Environment.Is64BitProcess ? "nvapi64.dll" : "nvapi.dll";
             string nvapi = FindFile(
-                Environment.Is64BitOperatingSystem ? "nvapi64.dll" : "nvapi.dll",
+                nvapiName,
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32",
-                    Environment.Is64BitOperatingSystem ? "nvapi64.dll" : "nvapi.dll"));
+                    nvapiName));
             foreach (GpuInfo gpu in items.Where(value => value.Vendor == GpuVendor.Nvidia))
             {
-                gpu.NvApiAvailable = HasExport(nvapi, "nvapi_QueryInterface");
-                if (gpu.NvApiAvailable) gpu.SupportedOperations.Add("检测到 NVAPI 驱动入口");
+                gpu.NvApiAvailable = ProbeNvApi(nvapi);
+                if (gpu.NvApiAvailable) AddSupportedOperation(gpu, "NVAPI 初始化与支持检测通过");
             }
         }
 
@@ -197,15 +320,17 @@ namespace ZyperWin__
                             "RadeonSoftware.exe",
                             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                                 "AMD", "CNext", "CNext", "RadeonSoftware.exe"));
+                        string adlxName = Environment.Is64BitProcess ? "amdadlx64.dll" : "amdadlx32.dll";
                         string adlx = FindFile(
-                            Environment.Is64BitOperatingSystem ? "amdadlx64.dll" : "amdadlx32.dll",
+                            adlxName,
                             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32",
-                                Environment.Is64BitOperatingSystem ? "amdadlx64.dll" : "amdadlx32.dll"),
+                                adlxName),
                             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "AMD", "CNext", "CNext",
-                                Environment.Is64BitOperatingSystem ? "amdadlx64.dll" : "amdadlx32.dll"));
-                        gpu.AdlxEntryAvailable = !string.IsNullOrWhiteSpace(adlx);
-                        if (gpu.AdlxEntryAvailable) gpu.SupportedOperations.Add("检测到 AMD ADLX 驱动入口");
-                        if (!string.IsNullOrWhiteSpace(gpu.ControlPanelPath)) gpu.SupportedOperations.Add("打开 AMD Software 官方调优入口");
+                                adlxName));
+                        string adlxVersion;
+                        gpu.AdlxEntryAvailable = ProbeAdlx(adlx, out adlxVersion);
+                        if (gpu.AdlxEntryAvailable) AddSupportedOperation(gpu, "AMD ADLX " + adlxVersion + " 初始化与支持检测通过");
+                        if (!string.IsNullOrWhiteSpace(gpu.ControlPanelPath)) AddSupportedOperation(gpu, "打开 AMD Software 官方调优入口");
                         break;
                     case GpuVendor.Intel:
                         gpu.ControlPanelPath = FindFile(
@@ -213,13 +338,13 @@ namespace ZyperWin__
                             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                                 "Intel", "Intel Graphics Software", "IntelGraphicsSoftware.exe"));
                         if (!string.IsNullOrWhiteSpace(gpu.ControlPanelPath))
-                            gpu.SupportedOperations.Add("打开 Intel Graphics Software");
+                            AddSupportedOperation(gpu, "打开 Intel Graphics Software");
                         break;
                 }
 
                 if (!string.IsNullOrWhiteSpace(gpu.ControlPanelPath) &&
                     !gpu.SupportedOperations.Any(value => value.IndexOf("打开", StringComparison.Ordinal) >= 0))
-                    gpu.SupportedOperations.Add("打开厂商官方控制面板");
+                    AddSupportedOperation(gpu, "打开厂商官方控制面板");
             }
         }
 
@@ -537,14 +662,29 @@ namespace ZyperWin__
             return null;
         }
 
-        private static bool HasExport(string libraryPath, string exportName)
+        private static bool ProbeNvApi(string libraryPath)
         {
             if (string.IsNullOrWhiteSpace(libraryPath) || !File.Exists(libraryPath)) return false;
             IntPtr module = IntPtr.Zero;
             try
             {
                 module = LoadLibrary(libraryPath);
-                return module != IntPtr.Zero && GetProcAddress(module, exportName) != IntPtr.Zero;
+                if (module == IntPtr.Zero) return false;
+                IntPtr queryAddress = GetProcAddress(module, "nvapi_QueryInterface");
+                if (queryAddress == IntPtr.Zero) return false;
+                var query = Marshal.GetDelegateForFunctionPointer<NvApiQueryInterfaceDelegate>(queryAddress);
+                IntPtr initializeAddress = query(0x0150e828);
+                if (initializeAddress == IntPtr.Zero) return false;
+                var initialize = Marshal.GetDelegateForFunctionPointer<NvApiFunctionDelegate>(initializeAddress);
+                if (initialize() != 0) return false;
+
+                IntPtr unloadAddress = query(0xd22bdd7e);
+                if (unloadAddress != IntPtr.Zero)
+                {
+                    var unload = Marshal.GetDelegateForFunctionPointer<NvApiFunctionDelegate>(unloadAddress);
+                    unload();
+                }
+                return true;
             }
             catch
             {
@@ -554,6 +694,69 @@ namespace ZyperWin__
             {
                 if (module != IntPtr.Zero) FreeLibrary(module);
             }
+        }
+
+        private static bool ProbeAdlx(string libraryPath, out string versionText)
+        {
+            versionText = string.Empty;
+            if (string.IsNullOrWhiteSpace(libraryPath) || !File.Exists(libraryPath)) return false;
+            IntPtr module = IntPtr.Zero;
+            bool initialized = false;
+            AdlxTerminateDelegate terminate = null;
+            try
+            {
+                module = LoadLibrary(libraryPath);
+                if (module == IntPtr.Zero) return false;
+                IntPtr queryAddress = GetProcAddress(module, "ADLXQueryFullVersion");
+                IntPtr initializeAddress = GetProcAddress(module, "ADLXInitialize");
+                IntPtr terminateAddress = GetProcAddress(module, "ADLXTerminate");
+                if (queryAddress == IntPtr.Zero || initializeAddress == IntPtr.Zero || terminateAddress == IntPtr.Zero) return false;
+
+                var query = Marshal.GetDelegateForFunctionPointer<AdlxQueryFullVersionDelegate>(queryAddress);
+                var initialize = Marshal.GetDelegateForFunctionPointer<AdlxInitializeDelegate>(initializeAddress);
+                terminate = Marshal.GetDelegateForFunctionPointer<AdlxTerminateDelegate>(terminateAddress);
+                ulong fullVersion;
+                if (!AdlxSucceeded(query(out fullVersion)) || fullVersion == 0) return false;
+                IntPtr systemServices;
+                int initializationResult = initialize(fullVersion, out systemServices);
+                initialized = AdlxSucceeded(initializationResult);
+                if (!initialized || systemServices == IntPtr.Zero) return false;
+                versionText = FormatAdlxVersion(fullVersion);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (initialized && terminate != null)
+                {
+                    try { terminate(); } catch { }
+                }
+                if (module != IntPtr.Zero) FreeLibrary(module);
+            }
+        }
+
+        private static bool AdlxSucceeded(int result)
+        {
+            return result == 0 || result == 1 || result == 2;
+        }
+
+        private static string FormatAdlxVersion(ulong version)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}.{1}.{2}.{3}",
+                (version >> 48) & 0xffff,
+                (version >> 32) & 0xffff,
+                (version >> 16) & 0xffff,
+                version & 0xffff);
+        }
+
+        private static void AddSupportedOperation(GpuInfo gpu, string operation)
+        {
+            if (!gpu.SupportedOperations.Contains(operation, StringComparer.Ordinal)) gpu.SupportedOperations.Add(operation);
         }
     }
 }

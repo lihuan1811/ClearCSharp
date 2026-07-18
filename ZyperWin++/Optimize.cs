@@ -17,10 +17,6 @@ namespace ZyperWin__
     public partial class Optimize : UserControl
     {
         private string xmlFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Bin", "ZyperData.xml");
-        private static readonly string OptimizationJournalPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "CDiskGlow",
-            "optimization_journal.txt");
         private Dictionary<string, bool> optimizationStatus = new Dictionary<string, bool>();
         private XDocument xmlDoc;
         [DllImport("user32.dll")]
@@ -1356,7 +1352,6 @@ namespace ZyperWin__
             int selectedCount = 0;
             int alreadyOptimizedCount = 0;
             bool actuallyOptimizedExplorerItem = false;
-            var newlyOptimizedTags = new List<string>();
 
             // 检查是否包含需要重启资源管理器的项目
             foreach (var category in tree1.Items)
@@ -1386,10 +1381,6 @@ namespace ZyperWin__
                         if (isAlreadyOptimized)
                         {
                             alreadyOptimizedCount++;
-                        }
-                        else
-                        {
-                            newlyOptimizedTags.Add(itemTag);
                         }
                     }
                 }
@@ -1425,9 +1416,6 @@ namespace ZyperWin__
                 {
                     // 冻结所有控件
                     SetControlsEnabled(false);
-
-                    // 先记录计划修改项；即使中途失败，全局还原仍会覆盖已执行部分。
-                    AddOptimizationJournal(newlyOptimizedTags);
 
                     // 异步执行优化
                     await PerformOptimizationWithProgress(false);
@@ -1482,7 +1470,6 @@ namespace ZyperWin__
             bool hasSelectedItems = false;
             int selectedCount = 0;
             bool actuallyRestoredExplorerItem = false;
-            var restoredTags = new List<string>();
 
             foreach (var category in tree1.Items)
             {
@@ -1497,8 +1484,6 @@ namespace ZyperWin__
                     {
                         hasSelectedItems = true;
                         selectedCount++;
-                        if (item.Tag != null) restoredTags.Add(item.Tag.ToString());
-
                         // 如果选中了外观/资源管理器分类的项目，标记需要重启
                         if (isExplorerCategory)
                         {
@@ -1537,8 +1522,6 @@ namespace ZyperWin__
 
                     // 关键修改：还原完成后立即刷新检测状态
                     CheckAllOptimizationStatus();
-                    RemoveOptimizationJournal(restoredTags);
-
                     // 修正：只有还原了外观项目才重启
                     if (actuallyRestoredExplorerItem)
                     {
@@ -1573,74 +1556,26 @@ namespace ZyperWin__
 
         public static int JournaledOptimizationCount()
         {
-            return ReadOptimizationJournal().Count;
+            return ReliableOptimizationExecutor.JournalCount;
         }
 
         public async Task<int> RestoreJournaledOptimizationsAsync()
         {
-            HashSet<string> journal = ReadOptimizationJournal();
-            if (journal.Count == 0) return 0;
-
-            int selectedCount = 0;
-            foreach (var category in tree1.Items)
-            {
-                category.Checked = false;
-                foreach (var item in category.Sub)
-                {
-                    string tag = item.Tag == null ? string.Empty : item.Tag.ToString();
-                    item.Checked = journal.Contains(tag);
-                    if (item.Checked) selectedCount++;
-                }
-            }
-            if (selectedCount == 0) return 0;
+            if (ReliableOptimizationExecutor.JournalCount == 0) return 0;
 
             SetControlsEnabled(false);
             try
             {
-                await PerformOptimizationWithProgress(true);
+                OptimizationExecutionResult result = await Task.Run(ReliableOptimizationExecutor.RestoreAllRecorded);
                 CheckAllOptimizationStatus();
-                RemoveOptimizationJournal(journal);
-                OperationLogger.Info("系统优化", "全局还原 " + selectedCount + " 个由本程序记录的优化项");
-                return selectedCount;
+                if (!result.Success) throw new InvalidOperationException(result.Message);
+                OperationLogger.Info("系统优化", result.Message);
+                return result.AffectedCount;
             }
             finally
             {
                 SetControlsEnabled(true);
             }
-        }
-
-        private static HashSet<string> ReadOptimizationJournal()
-        {
-            try
-            {
-                if (!File.Exists(OptimizationJournalPath)) return new HashSet<string>(StringComparer.Ordinal);
-                return new HashSet<string>(File.ReadAllLines(OptimizationJournalPath).Where(value => !string.IsNullOrWhiteSpace(value)), StringComparer.Ordinal);
-            }
-            catch
-            {
-                return new HashSet<string>(StringComparer.Ordinal);
-            }
-        }
-
-        private static void AddOptimizationJournal(IEnumerable<string> tags)
-        {
-            HashSet<string> journal = ReadOptimizationJournal();
-            foreach (string tag in tags.Where(value => !string.IsNullOrWhiteSpace(value))) journal.Add(tag);
-            WriteOptimizationJournal(journal);
-        }
-
-        private static void RemoveOptimizationJournal(IEnumerable<string> tags)
-        {
-            HashSet<string> journal = ReadOptimizationJournal();
-            foreach (string tag in tags) journal.Remove(tag);
-            WriteOptimizationJournal(journal);
-        }
-
-        private static void WriteOptimizationJournal(IEnumerable<string> tags)
-        {
-            string directory = Path.GetDirectoryName(OptimizationJournalPath);
-            Directory.CreateDirectory(directory);
-            File.WriteAllLines(OptimizationJournalPath, tags.OrderBy(value => value).ToArray());
         }
 
         // 冻结或恢复所有控件
@@ -2873,26 +2808,7 @@ namespace ZyperWin__
                     if (item.Tag != null)
                     {
                         string itemTag = item.Tag.ToString();
-                        bool isOptimized = false;
-
-                        // 特殊项目的状态检查
-                        if (itemTag.Contains("快捷方式") && itemTag.Contains("字样"))
-                        {
-                            isOptimized = CheckShortcutTextOptimization();
-                        }
-                        else if (itemTag.Contains("Exploit Protection") || itemTag.Contains("乱序内存"))
-                        {
-                            isOptimized = CheckExploitProtectionStatus();
-                        }
-                        else if (itemTag == "1、优化进程数量")
-                        {
-                            isOptimized = CheckProcessOptimizationStatus();
-                        }
-                        else
-                        {
-                            // 使用统一的检查方法
-                            isOptimized = CheckOptimizationStatus(itemTag);
-                        }
+                        bool isOptimized = CheckOptimizationStatus(itemTag);
 
                         optimizationStatus[itemTag] = isOptimized;
 
@@ -3041,34 +2957,9 @@ namespace ZyperWin__
         {
             if (xmlDoc == null) return false;
 
-            switch (itemTag)
-            {
-                case "6、将磁盘错误检查的等待时间缩短到五秒":
-                    return CheckAutoChkTimeout();
-                case "18、禁用诊断服务":
-                    return CheckServiceStatus("DiagTrack", "4");
-                case "24、禁用NTFS链接跟踪服务":
-                    return CheckServiceStatus("TrkWks", "4");
-                case "29、去除本地磁盘重复显示":
-                    return CheckRegistryKeyExists(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\DelegateFolders\{F5FB2C77-0E2F-4A16-A381-3E560C68BC83}");
-            }
-
             var itemElement = xmlDoc.Descendants("Item")
                 .FirstOrDefault(e => e.Attribute("name")?.Value == itemTag);
-
-            if (itemElement != null)
-            {
-                string checkKey = itemElement.Attribute("checkKey")?.Value;
-                string checkValue = itemElement.Attribute("checkValue")?.Value;
-                string optimizedValue = itemElement.Attribute("optimizedValue")?.Value;
-
-                if (!string.IsNullOrEmpty(checkKey) && !string.IsNullOrEmpty(checkValue))
-                {
-                    return CheckRegistryValueEnhanced(checkKey, checkValue, optimizedValue);
-                }
-            }
-
-            return false;
+            return ReliableOptimizationExecutor.VerifyItem(itemElement, itemTag, out _);
         }
 
         private bool CheckAutoChkTimeout()
@@ -3205,6 +3096,14 @@ namespace ZyperWin__
                 return;
             }
 
+            if (isRestore)
+            {
+                IDictionary<string, DateTime> snapshotTimes = ReliableOptimizationExecutor.LatestSnapshotTimes();
+                selectedItems = selectedItems
+                    .OrderByDescending(value => snapshotTimes.TryGetValue(value.itemTag, out DateTime createdAt) ? createdAt : DateTime.MinValue)
+                    .ToList();
+            }
+
             try
             {
                 // ... 进度显示代码 ...
@@ -3235,12 +3134,15 @@ namespace ZyperWin__
                     if (configElement != null)
                     {
                         Console.WriteLine($"找到XML配置，开始{(isRestore ? "还原" : "优化")}...");
-                        ProcessXmlCommands(configElement, isRestore, itemTag);
+                        OptimizationExecutionResult result = isRestore
+                            ? ReliableOptimizationExecutor.RestoreLatest(itemTag)
+                            : ReliableOptimizationExecutor.Apply(configElement, itemTag);
+                        if (!result.Success) throw new InvalidOperationException(itemTag + "：" + result.Message);
                         Console.WriteLine($"项目 {itemTag} 处理完成");
                     }
                     else
                     {
-                        Console.WriteLine($"警告：未找到XML配置: {itemTag}");
+                        throw new InvalidDataException("未找到系统优化规则：" + itemTag);
                     }
 
                     // 添加延迟，让用户能看到进度变化

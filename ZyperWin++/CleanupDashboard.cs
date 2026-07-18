@@ -385,7 +385,11 @@ namespace ZyperWin__
                     result.DeletedFiles,
                     DisplayFormat.Bytes(result.Bytes),
                     result.FailedFiles);
-                MessageBox.Show(status.Text, "清理完成", MessageBoxButtons.OK,
+                string details = result.Errors.Count == 0
+                    ? status.Text
+                    : status.Text + "\n\n失败详情：\n" + string.Join("\n", result.Errors.Take(8)) +
+                      (result.Errors.Count > 8 ? "\n其余失败项请查看操作日志。" : string.Empty);
+                MessageBox.Show(details, "清理完成", MessageBoxButtons.OK,
                     result.FailedFiles == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
                 foreach (DataGridViewRow row in grid.Rows)
                 {

@@ -18,6 +18,14 @@ namespace ZyperWin__
     public static class BackupStore
     {
         private static readonly object Sync = new object();
+        private static readonly string LocalRootPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CDiskGlow",
+            "backups");
+        private static readonly string RootIndexPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CDiskGlow",
+            "backup_roots.txt");
 
         public static string RootPath
         {
@@ -25,10 +33,7 @@ namespace ZyperWin__
             {
                 string externalRoot;
                 if (TryGetSpaceReleasingRoot(out externalRoot)) return externalRoot;
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CDiskGlow",
-                    "backups");
+                return LocalRootPath;
             }
         }
 
@@ -74,6 +79,7 @@ namespace ZyperWin__
                 if (!source.Exists) return true;
                 string root = Path.GetFullPath(rootPath);
                 Directory.CreateDirectory(root);
+                RegisterRoot(root);
                 string key = Hash(source.FullName + "|" + DateTime.UtcNow.Ticks);
                 string folder = Path.Combine(root, key.Substring(0, 2), key);
                 Directory.CreateDirectory(folder);
@@ -109,7 +115,36 @@ namespace ZyperWin__
 
         public static IList<BackupRecord> ReadRecords()
         {
-            return ReadRecords(RootPath);
+            return EnumerateBackupRoots()
+                .SelectMany(ReadRecords)
+                .GroupBy(record => record.BackupPath, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.OrderByDescending(record => record.CreatedAt).First())
+                .OrderByDescending(record => record.CreatedAt)
+                .ToList();
+        }
+
+        internal static IList<string> EnumerateBackupRoots()
+        {
+            var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { LocalRootPath };
+            lock (Sync)
+            {
+                try
+                {
+                    if (File.Exists(RootIndexPath))
+                        foreach (string root in File.ReadAllLines(RootIndexPath, Encoding.UTF8)) AddRoot(roots, root);
+                }
+                catch (Exception ex) { OperationLogger.Error("备份索引", ex.Message); }
+            }
+            try
+            {
+                foreach (DriveInfo drive in DriveInfo.GetDrives())
+                {
+                    if (!drive.IsReady || (drive.DriveType != DriveType.Fixed && drive.DriveType != DriveType.Removable)) continue;
+                    AddRoot(roots, Path.Combine(drive.RootDirectory.FullName, "C_DiskGlow_Backups"));
+                }
+            }
+            catch (Exception ex) { OperationLogger.Error("备份磁盘枚举", ex.Message); }
+            return roots.Where(Directory.Exists).ToList();
         }
 
         private static IList<BackupRecord> ReadRecords(string rootPath)
@@ -143,6 +178,28 @@ namespace ZyperWin__
                 }
             }
             return records.OrderByDescending(record => record.CreatedAt).ToList();
+        }
+
+        private static void RegisterRoot(string rootPath)
+        {
+            lock (Sync)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(RootIndexPath));
+                var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (File.Exists(RootIndexPath))
+                    foreach (string value in File.ReadAllLines(RootIndexPath, Encoding.UTF8)) AddRoot(roots, value);
+                AddRoot(roots, rootPath);
+                string temporary = RootIndexPath + ".tmp";
+                File.WriteAllLines(temporary, roots.OrderBy(value => value).ToArray(), new UTF8Encoding(false));
+                File.Move(temporary, RootIndexPath, true);
+            }
+        }
+
+        private static void AddRoot(ISet<string> roots, string rootPath)
+        {
+            if (string.IsNullOrWhiteSpace(rootPath)) return;
+            try { roots.Add(Path.GetFullPath(rootPath.Trim())); }
+            catch { }
         }
 
         public static bool TryRestore(BackupRecord record, out string error)

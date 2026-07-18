@@ -102,6 +102,12 @@ namespace ZyperWin__
     {
         private const string UninstallPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
 
+        private sealed class RegistryEntryProbe
+        {
+            public bool Exists { get; set; }
+            public string Error { get; set; }
+        }
+
         public Task<IList<InstalledApp>> LoadAsync(InstalledAppKind kind, CancellationToken cancellationToken)
         {
             return kind == InstalledAppKind.Store
@@ -113,14 +119,17 @@ namespace ZyperWin__
         {
             if (app.Kind == InstalledAppKind.Store)
             {
-                string script = "Remove-AppxPackage -Package '" +
-                    CommandLineTools.EscapePowerShellLiteral(app.Id) + "' -ErrorAction Stop";
+                string packageId = CommandLineTools.EscapePowerShellLiteral(app.Id);
+                string script = "$id='" + packageId + "';" +
+                    "$package=Get-AppxPackage | Where-Object { $_.PackageFullName -eq $id } | Select-Object -First 1;" +
+                    "if($null -ne $package){Remove-AppxPackage -Package $package.PackageFullName -ErrorAction Stop};" +
+                    "if(Get-AppxPackage | Where-Object { $_.PackageFullName -eq $id }){throw '卸载命令结束后应用仍然存在'}";
                 return await ProcessRunner.RunPowerShellAsync(script, 180000, cancellationToken);
             }
 
             ProcessResult backup = await Task.Run(() => BackupUninstallRegistry(app, cancellationToken), cancellationToken);
             if (!backup.Success) return backup;
-            ProcessResult uninstall = await Task.Run(() => LaunchDesktopUninstaller(app), cancellationToken);
+            ProcessResult uninstall = await Task.Run(() => LaunchDesktopUninstaller(app, cancellationToken), cancellationToken);
             if (!string.IsNullOrWhiteSpace(backup.Output))
                 uninstall.Output = (backup.Output + Environment.NewLine + uninstall.Output).Trim();
             return uninstall;
@@ -240,7 +249,7 @@ namespace ZyperWin__
             return apps.OrderBy(value => value.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
         }
 
-        private static ProcessResult LaunchDesktopUninstaller(InstalledApp app)
+        private static ProcessResult LaunchDesktopUninstaller(InstalledApp app, CancellationToken cancellationToken)
         {
             string command = string.IsNullOrWhiteSpace(app.UninstallCommand)
                 ? app.QuietUninstallCommand
@@ -271,19 +280,37 @@ namespace ZyperWin__
                         ? Path.GetDirectoryName(executable)
                         : Environment.CurrentDirectory
                 };
-                Process process = Process.Start(startInfo);
-                if (process == null)
-                    return new ProcessResult { ExitCode = -1, Error = "无法启动卸载程序。", Output = string.Empty };
-
-                process.WaitForExit();
-                int exitCode = process.ExitCode;
+                int exitCode;
+                using (Process process = Process.Start(startInfo))
+                {
+                    if (process == null)
+                        return new ProcessResult { ExitCode = -1, Error = "无法启动卸载程序。", Output = string.Empty };
+                    while (!process.WaitForExit(500)) cancellationToken.ThrowIfCancellationRequested();
+                    exitCode = process.ExitCode;
+                }
                 bool accepted = exitCode == 0 || exitCode == 1641 || exitCode == 3010;
+                if (!accepted)
+                {
+                    return new ProcessResult
+                    {
+                        ExitCode = exitCode,
+                        Output = "卸载程序已结束，退出码 " + exitCode + "。",
+                        Error = "卸载程序返回退出码 " + exitCode
+                    };
+                }
+
+                RegistryEntryProbe confirmation = WaitForRegistryRemoval(app, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(confirmation.Error))
+                    return new ProcessResult { ExitCode = 1, Error = "无法确认卸载结果：" + confirmation.Error, Output = string.Empty };
+                if (confirmation.Exists)
+                    return new ProcessResult { ExitCode = 1, Error = "卸载程序已经结束，但应用仍在已安装列表中。", Output = string.Empty };
+
                 OperationLogger.Info("软件卸载", "卸载程序已结束：" + app.Name + "，退出码 " + exitCode);
                 return new ProcessResult
                 {
-                    ExitCode = accepted ? 0 : exitCode,
-                    Output = "卸载程序已结束，退出码 " + exitCode + "。",
-                    Error = accepted ? string.Empty : "卸载程序返回退出码 " + exitCode
+                    ExitCode = 0,
+                    Output = "卸载程序已结束并确认应用记录已移除，退出码 " + exitCode + "。",
+                    Error = string.Empty
                 };
             }
             catch (Exception ex)
@@ -296,8 +323,10 @@ namespace ZyperWin__
         {
             if (string.IsNullOrWhiteSpace(app.RegistryPath))
                 return new ProcessResult { ExitCode = 0, Output = "没有需要备份的卸载注册表项。", Error = string.Empty };
-            ProcessResult query = ProcessRunner.Run("reg.exe", "query \"" + app.RegistryPath + "\" " + RegViewArgument(app), 30000, cancellationToken);
-            if (!query.Success)
+            RegistryEntryProbe probe = ProbeRegistryEntry(app);
+            if (!string.IsNullOrWhiteSpace(probe.Error))
+                return new ProcessResult { ExitCode = 1, Output = string.Empty, Error = "无法读取卸载注册表项：" + probe.Error };
+            if (!probe.Exists)
                 return new ProcessResult { ExitCode = 0, Output = "卸载注册表项已不存在。", Error = string.Empty };
             try
             {
@@ -324,10 +353,11 @@ namespace ZyperWin__
             var scan = new UninstallResidualScan { App = app };
             if (!string.IsNullOrWhiteSpace(app.RegistryPath))
             {
-                ProcessResult query = ProcessRunner.Run("reg.exe", "query \"" + app.RegistryPath + "\" " + RegViewArgument(app), 30000, cancellationToken);
-                scan.RegistryEntryExists = query.Success;
+                RegistryEntryProbe probe = ProbeRegistryEntry(app);
+                if (!string.IsNullOrWhiteSpace(probe.Error)) throw new InvalidOperationException("读取卸载注册表项失败：" + probe.Error);
+                scan.RegistryEntryExists = probe.Exists;
             }
-            scan.InstallDirectoryExists = IsSafeInstallLocation(app.InstallLocation);
+            scan.InstallDirectoryExists = InstallLocationExists(app.InstallLocation);
             ScanStartupResiduals(app, Registry.CurrentUser, "当前用户", scan.StartupEntries);
             ScanStartupResiduals(app, Registry.LocalMachine, "所有用户", scan.StartupEntries);
             ScanShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), scan.Shortcuts);
@@ -348,8 +378,9 @@ namespace ZyperWin__
             {
                 try
                 {
-                    ProcessResult query = ProcessRunner.Run("reg.exe", "query \"" + app.RegistryPath + "\" " + RegViewArgument(app), 30000, cancellationToken);
-                    if (!query.Success) messages.Add("卸载注册表项已不存在。");
+                    RegistryEntryProbe probe = ProbeRegistryEntry(app);
+                    if (!string.IsNullOrWhiteSpace(probe.Error)) errors.Add("读取卸载注册表项失败：" + probe.Error);
+                    else if (!probe.Exists) messages.Add("卸载注册表项已不存在。");
                     else
                     {
                         string backupDirectory = Path.Combine(
@@ -365,7 +396,10 @@ namespace ZyperWin__
                         {
                             messages.Add("已备份卸载注册表：" + backup);
                             ProcessResult remove = ProcessRunner.Run("reg.exe", "delete \"" + app.RegistryPath + "\" /f " + RegViewArgument(app), 60000, cancellationToken);
-                            if (remove.Success) messages.Add("已删除卸载注册表残留。");
+                            RegistryEntryProbe confirmation = ProbeRegistryEntry(app);
+                            if (remove.Success && !confirmation.Exists && string.IsNullOrWhiteSpace(confirmation.Error)) messages.Add("已删除卸载注册表残留。");
+                            else if (!string.IsNullOrWhiteSpace(confirmation.Error)) errors.Add("删除后验证失败：" + confirmation.Error);
+                            else if (confirmation.Exists) errors.Add("删除命令结束后卸载注册表项仍然存在。");
                             else errors.Add("删除卸载注册表残留失败：" + ResultMessage(remove));
                         }
                     }
@@ -385,7 +419,11 @@ namespace ZyperWin__
             RemoveShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.StartMenu), messages, errors);
             RemoveShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu), messages, errors);
 
-            if (removeInstallDirectory && IsSafeInstallLocation(app.InstallLocation))
+            if (removeInstallDirectory && InstallLocationExists(app.InstallLocation) && !IsSafeInstallLocation(app.InstallLocation))
+            {
+                errors.Add("为避免误删，安装目录不在允许自动删除的位置，已保留：" + app.InstallLocation);
+            }
+            else if (removeInstallDirectory && IsSafeInstallLocation(app.InstallLocation))
             {
                 try
                 {
@@ -417,7 +455,7 @@ namespace ZyperWin__
                     foreach (string valueName in run.GetValueNames())
                     {
                         string value = Convert.ToString(run.GetValue(valueName));
-                        if (!MatchesApplication(app, valueName + " " + value)) continue;
+                        if (!MatchesApplication(app, valueName) && !MatchesApplication(app, value)) continue;
                         run.DeleteValue(valueName, false);
                         messages.Add("已删除启动项：" + valueName);
                     }
@@ -439,7 +477,7 @@ namespace ZyperWin__
                     foreach (string valueName in run.GetValueNames())
                     {
                         string value = Convert.ToString(run.GetValue(valueName));
-                        if (MatchesApplication(app, valueName + " " + value)) entries.Add(scope + "启动项：" + valueName);
+                        if (MatchesApplication(app, valueName) || MatchesApplication(app, value)) entries.Add(scope + "启动项：" + valueName);
                     }
                 }
             }
@@ -485,12 +523,79 @@ namespace ZyperWin__
             return string.IsNullOrWhiteSpace(result.Error) ? result.Output : result.Error;
         }
 
-        private static bool MatchesApplication(InstalledApp app, string value)
+        internal static bool MatchesApplication(InstalledApp app, string value)
         {
             string text = value ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(app.InstallLocation) && text.IndexOf(app.InstallLocation, StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            string name = (app.Name ?? string.Empty).Trim();
-            return name.Length >= 4 && text.IndexOf(name, StringComparison.CurrentCultureIgnoreCase) >= 0;
+            string expandedLocation = Environment.ExpandEnvironmentVariables(app.InstallLocation ?? string.Empty).Trim().Trim('"');
+            if (!string.IsNullOrWhiteSpace(expandedLocation) &&
+                text.IndexOf(expandedLocation, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+
+            string expected = NormalizeIdentity(app.Name);
+            string candidate = NormalizeIdentity(text);
+            if (expected.Length < 3 || candidate.Length == 0) return false;
+            if (string.Equals(candidate, expected, StringComparison.Ordinal)) return true;
+
+            string[] allowedSuffixes = { "shortcut", "快捷方式", "launcher", "启动器" };
+            return allowedSuffixes.Any(suffix => string.Equals(candidate, expected + NormalizeIdentity(suffix), StringComparison.Ordinal));
+        }
+
+        private static string NormalizeIdentity(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            var builder = new StringBuilder(value.Length);
+            foreach (char character in value.Normalize(NormalizationForm.FormKC))
+                if (char.IsLetterOrDigit(character)) builder.Append(char.ToLowerInvariant(character));
+            return builder.ToString();
+        }
+
+        private static RegistryEntryProbe WaitForRegistryRemoval(InstalledApp app, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(app.RegistryPath))
+                return new RegistryEntryProbe { Exists = false, Error = string.Empty };
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(90);
+            RegistryEntryProbe probe;
+            do
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                probe = ProbeRegistryEntry(app);
+                if (!probe.Exists || !string.IsNullOrWhiteSpace(probe.Error)) return probe;
+                Thread.Sleep(500);
+            }
+            while (DateTime.UtcNow < deadline);
+            return probe;
+        }
+
+        private static RegistryEntryProbe ProbeRegistryEntry(InstalledApp app)
+        {
+            try
+            {
+                string path = app.RegistryPath ?? string.Empty;
+                RegistryHive hive;
+                string subKey;
+                if (path.StartsWith("HKLM\\", StringComparison.OrdinalIgnoreCase))
+                {
+                    hive = RegistryHive.LocalMachine;
+                    subKey = path.Substring(5);
+                }
+                else if (path.StartsWith("HKCU\\", StringComparison.OrdinalIgnoreCase))
+                {
+                    hive = RegistryHive.CurrentUser;
+                    subKey = path.Substring(5);
+                }
+                else
+                {
+                    return new RegistryEntryProbe { Exists = false, Error = "不支持的注册表路径：" + path };
+                }
+
+                using (RegistryKey baseKey = RegistryKey.OpenBaseKey(hive, app.RegistryView))
+                using (RegistryKey key = baseKey.OpenSubKey(subKey, false))
+                    return new RegistryEntryProbe { Exists = key != null, Error = string.Empty };
+            }
+            catch (Exception ex)
+            {
+                return new RegistryEntryProbe { Exists = false, Error = ex.Message };
+            }
         }
 
         private static bool IsSafeInstallLocation(string location)
@@ -509,9 +614,33 @@ namespace ZyperWin__
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
             };
-            return protectedRoots
+            if (!protectedRoots
                 .Where(root => !string.IsNullOrWhiteSpace(root))
-                .All(root => !string.Equals(full, Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase));
+                .All(root => !string.Equals(full, Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))) return false;
+
+            string[] allowedRoots =
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+            };
+            return allowedRoots.Where(root => !string.IsNullOrWhiteSpace(root)).Any(root => IsStrictChild(full, root));
+        }
+
+        private static bool InstallLocationExists(string location)
+        {
+            if (string.IsNullOrWhiteSpace(location)) return false;
+            try { return Directory.Exists(Path.GetFullPath(Environment.ExpandEnvironmentVariables(location)).TrimEnd(Path.DirectorySeparatorChar)); }
+            catch { return false; }
+        }
+
+        private static bool IsStrictChild(string path, string root)
+        {
+            string normalizedPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
+            string normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
+            return normalizedPath.Length > normalizedRoot.Length &&
+                normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsSameOrChild(string path, string root)

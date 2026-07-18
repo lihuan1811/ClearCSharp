@@ -1,8 +1,12 @@
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -23,6 +27,13 @@ namespace ZyperWin__
             public bool Recommended;
             public bool Deep;
             public int Timeout;
+        }
+
+        private sealed class RepairRunResult
+        {
+            public ProcessResult Process;
+            public bool Scheduled;
+            public string Note;
         }
 
         private readonly DataGridView grid = UiFactory.Grid();
@@ -189,6 +200,7 @@ namespace ZyperWin__
             progress.Value = 0;
             output.Clear();
             int succeeded = 0;
+            int scheduled = 0;
             var failures = new List<string>();
             try
             {
@@ -198,11 +210,18 @@ namespace ZyperWin__
                     status.Text = string.Format("正在执行 {0}/{1}：{2}", index + 1, selected.Count, action.Name);
                     output.AppendText("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + action.Name + Environment.NewLine);
                     output.AppendText("> " + action.DisplayCommand + Environment.NewLine);
-                    ProcessResult result = await RunActionAsync(action, cancellation.Token);
+                    RepairRunResult execution = await RunActionAsync(action, cancellation.Token);
+                    ProcessResult result = execution.Process;
                     if (!string.IsNullOrWhiteSpace(result.Output)) output.AppendText(result.Output + Environment.NewLine);
                     if (!string.IsNullOrWhiteSpace(result.Error)) output.AppendText(result.Error + Environment.NewLine);
                     output.AppendText("退出码：" + result.ExitCode + Environment.NewLine + Environment.NewLine);
-                    if (result.Success)
+                    if (result.Success && execution.Scheduled)
+                    {
+                        scheduled++;
+                        output.AppendText("状态：已计划，尚未执行完成。" + Environment.NewLine + Environment.NewLine);
+                        OperationLogger.Info("系统修复", action.Name + " 已计划：" + execution.Note);
+                    }
+                    else if (result.Success)
                     {
                         succeeded++;
                         OperationLogger.Info("系统修复", action.Name + " 执行成功");
@@ -214,9 +233,11 @@ namespace ZyperWin__
                     }
                     progress.Value = index + 1;
                 }
-                status.Text = string.Format("修复执行完成：成功 {0}，失败 {1}。", succeeded, failures.Count);
+                status.Text = string.Format("修复处理结束：已完成 {0}，已计划 {1}，失败 {2}。", succeeded, scheduled, failures.Count);
                 if (failures.Count > 0)
                     MessageBox.Show(string.Join(Environment.NewLine, failures), "部分修复失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                else if (scheduled > 0)
+                    MessageBox.Show("磁盘深度修复已安排在下次系统启动时执行，目前不能算作修复完成。", "修复已计划", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (OperationCanceledException)
             {
@@ -237,11 +258,166 @@ namespace ZyperWin__
             }
         }
 
-        private static Task<ProcessResult> RunActionAsync(RepairAction action, CancellationToken cancellationToken)
+        private static async Task<RepairRunResult> RunActionAsync(RepairAction action, CancellationToken cancellationToken)
         {
+            if (action.Id == "windows_update_reset")
+                return await Task.Run(() => ResetWindowsUpdate(cancellationToken), cancellationToken);
+
+            ProcessResult result;
             if (action.Id == "dism_restore_health" && Environment.OSVersion.Version.Major == 6 && Environment.OSVersion.Version.Minor == 1)
-                return ProcessRunner.RunAsync("sfc.exe", "/scannow", action.Timeout, cancellationToken);
-            return ProcessRunner.RunAsync(action.FileName, action.Arguments, action.Timeout, cancellationToken);
+                result = await ProcessRunner.RunAsync("sfc.exe", "/scannow", action.Timeout, cancellationToken);
+            else
+                result = await ProcessRunner.RunAsync(action.FileName, action.Arguments, action.Timeout, cancellationToken);
+
+            bool scheduled = action.Id == "chkdsk_deep" && result.Success && IsChkdskScheduled(result.Output);
+            return new RepairRunResult
+            {
+                Process = result,
+                Scheduled = scheduled,
+                Note = scheduled ? "下次启动时执行 CHKDSK /F /R" : string.Empty
+            };
+        }
+
+        private static RepairRunResult ResetWindowsUpdate(CancellationToken cancellationToken)
+        {
+            string[] serviceNames = { "wuauserv", "bits", "cryptsvc" };
+            var originalStates = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            var messages = new StringBuilder();
+            var errors = new List<string>();
+            try
+            {
+                foreach (string serviceName in serviceNames)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int state = QueryServiceState(serviceName, cancellationToken);
+                    if (state < 0)
+                    {
+                        errors.Add("无法读取服务状态：" + serviceName);
+                        continue;
+                    }
+                    originalStates[serviceName] = state == 4;
+                    if (state == 4 && !SetServiceRunning(serviceName, false, cancellationToken, messages))
+                        errors.Add("无法停止服务：" + serviceName);
+                }
+
+                if (errors.Count == 0)
+                {
+                    ResetUpdateDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "SoftwareDistribution"), messages, errors);
+                    ResetUpdateDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "catroot2"), messages, errors);
+                }
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                errors.Add(ex.Message);
+            }
+            finally
+            {
+                foreach (KeyValuePair<string, bool> service in originalStates)
+                {
+                    if (!service.Value) continue;
+                    try
+                    {
+                        if (!SetServiceRunning(service.Key, true, CancellationToken.None, messages))
+                            errors.Add("无法恢复服务运行状态：" + service.Key);
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add("恢复服务失败 " + service.Key + "：" + ex.Message);
+                    }
+                }
+            }
+
+            return new RepairRunResult
+            {
+                Process = new ProcessResult
+                {
+                    ExitCode = errors.Count == 0 ? 0 : 1,
+                    Output = messages.ToString().Trim(),
+                    Error = string.Join(Environment.NewLine, errors)
+                },
+                Scheduled = false,
+                Note = string.Empty
+            };
+        }
+
+        private static void ResetUpdateDirectory(string source, StringBuilder messages, IList<string> errors)
+        {
+            string previous = source + ".old";
+            try
+            {
+                if (Directory.Exists(previous)) Directory.Delete(previous, true);
+                if (!Directory.Exists(source))
+                {
+                    messages.AppendLine("目录已不存在，无需重命名：" + source);
+                    return;
+                }
+                Directory.Move(source, previous);
+                if (Directory.Exists(source) || !Directory.Exists(previous))
+                    throw new IOException("重命名后验证失败。");
+                messages.AppendLine("已重建目录：" + source);
+            }
+            catch (Exception ex)
+            {
+                errors.Add(source + "：" + ex.Message);
+            }
+        }
+
+        private static int QueryServiceState(string serviceName, CancellationToken cancellationToken)
+        {
+            ProcessResult query = ProcessRunner.Run("sc.exe", "query \"" + serviceName + "\"", 30000, cancellationToken);
+            if (!query.Success) return -1;
+            Match match = Regex.Match(query.Output, @"(?im)(?:STATE|状态)\s*:\s*(\d+)");
+            return match.Success ? int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) : -1;
+        }
+
+        private static bool SetServiceRunning(
+            string serviceName,
+            bool running,
+            CancellationToken cancellationToken,
+            StringBuilder messages)
+        {
+            int current = QueryServiceState(serviceName, cancellationToken);
+            if (current < 0) return false;
+            if ((current == 4) == running) return true;
+            ProcessResult command = ProcessRunner.Run(
+                "sc.exe",
+                (running ? "start " : "stop ") + "\"" + serviceName + "\"",
+                60000,
+                cancellationToken);
+            DateTime deadline = DateTime.UtcNow.AddSeconds(30);
+            while (DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int state = QueryServiceState(serviceName, cancellationToken);
+                if ((state == 4) == running)
+                {
+                    messages.AppendLine((running ? "已启动服务：" : "已停止服务：") + serviceName);
+                    return true;
+                }
+                Thread.Sleep(300);
+            }
+            messages.AppendLine(command.Error);
+            return false;
+        }
+
+        private static bool IsChkdskScheduled(string commandOutput)
+        {
+            string systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? string.Empty;
+            if (string.Equals(systemDrive.TrimEnd('\\'), "C:", StringComparison.OrdinalIgnoreCase)) return true;
+            if (Regex.IsMatch(commandOutput ?? string.Empty,
+                @"(?is)scheduled.+next.+(?:restart|reboot)|下次.*(?:启动|重新启动).*检查")) return true;
+            try
+            {
+                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Session Manager"))
+                {
+                    object value = key == null ? null : key.GetValue("BootExecute");
+                    IEnumerable<string> commands = value is string[] ? (string[])value : new[] { Convert.ToString(value) };
+                    return commands.Any(command => !string.IsNullOrWhiteSpace(command) &&
+                        command.IndexOf("autocheck", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        command.IndexOf("C:", StringComparison.OrdinalIgnoreCase) >= 0);
+                }
+            }
+            catch { return false; }
         }
 
         private static IList<RepairAction> CreateActions()
@@ -253,9 +429,9 @@ namespace ZyperWin__
                 Action("flush_dns", "DNS 刷新", "安全", "清空 DNS 解析缓存。", "ipconfig.exe", "/flushdns", "ipconfig /flushdns", true, false, 120000),
                 Action("winsock_reset", "Winsock 网络重置", "安全", "重置 Windows 网络套接字目录，完成后通常需要重启。", "netsh.exe", "winsock reset", "netsh winsock reset", true, false, 120000),
                 Action("dism_restore_health", "DISM 系统镜像修复", "谨慎", "使用 DISM 修复系统组件仓库；Windows 7 自动回退到 SFC。", "dism.exe", "/Online /Cleanup-Image /RestoreHealth", "DISM /Online /Cleanup-Image /RestoreHealth", false, true, 1800000),
-                Action("chkdsk_deep", "磁盘错误深度修复", "谨慎", "安排 C 盘深度修复，可能需要重启。", "cmd.exe", "/D /C echo Y|chkdsk C: /F /R", "echo Y|chkdsk C: /F /R", false, true, 1800000),
-                Action("windows_update_reset", "系统更新组件修复", "谨慎", "停止更新服务并重建 SoftwareDistribution 和 catroot2。", "cmd.exe",
-                    "/D /C net stop wuauserv & net stop bits & net stop cryptsvc & if exist %systemroot%\\SoftwareDistribution.old rmdir /S /Q %systemroot%\\SoftwareDistribution.old & if exist %systemroot%\\System32\\catroot2.old rmdir /S /Q %systemroot%\\System32\\catroot2.old & ren %systemroot%\\SoftwareDistribution SoftwareDistribution.old & ren %systemroot%\\System32\\catroot2 catroot2.old & net start cryptsvc & net start bits & net start wuauserv",
+                Action("chkdsk_deep", "磁盘错误深度修复", "谨慎", "安排 C 盘深度修复；若磁盘正被使用，将在下次启动执行并显示为已计划。", "cmd.exe", "/D /C echo Y|chkdsk C: /F /R", "echo Y|chkdsk C: /F /R", false, true, 1800000),
+                Action("windows_update_reset", "系统更新组件修复", "谨慎", "逐项停止更新服务并重建 SoftwareDistribution 和 catroot2，每一步均检查结果。", "内部执行器",
+                    string.Empty,
                     "重建 SoftwareDistribution 和 catroot2", false, true, 600000)
             };
             string wsreset = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wsreset.exe");

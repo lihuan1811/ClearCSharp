@@ -93,7 +93,7 @@ namespace ZyperWin__
             AddAction(actions, "移动", async delegate { await CopyOrMoveAsync(true); });
             AddAction(actions, "批量重命名", RenameAsync);
             AddAction(actions, "批量删除", DeleteAsync);
-            AddAction(actions, "文件粉碎", ShredAsync);
+            AddAction(actions, "覆盖删除", ShredAsync);
             AddAction(actions, "文件夹权限修复", RepairPermissionAsync);
             AddAction(actions, "迁移并生成快捷方式", MigrateAsync, true);
             bottom.SetColumnSpan(actions, 2);
@@ -259,7 +259,7 @@ namespace ZyperWin__
         {
             List<string> paths = RequireSelection();
             if (paths == null) return;
-            await RunOperationAsync("文件粉碎", "将对 " + paths.Count + " 个文件覆写两遍后永久删除。该操作无法还原。\n\n是否继续？",
+            await RunOperationAsync("覆盖删除", "将对 " + paths.Count + " 个文件执行两遍应用层覆写后删除，且不创建备份。\n\nSSD/TRIM、压缩、快照、云同步或写时复制存储可能保留底层副本，因此不能保证物理不可恢复。是否继续？",
                 token => service.ShredAsync(paths, token), MessageBoxIcon.Stop);
         }
 

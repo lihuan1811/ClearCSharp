@@ -220,11 +220,13 @@ namespace ZyperWin__
                 ShowNode(currentNode);
                 PopulateExtensions();
                 status.Text = string.Format(
-                    "扫描完成：{0:N0} 个文件，{1}，跳过 {2:N0} 个无权限路径。",
+                    "扫描完成：{0:N0} 个文件，物理占用 {1}，逻辑大小 {2}，跳过 {3:N0} 个无权限路径。",
                     analysis.Root.FileCount,
+                    DisplayFormat.Bytes(analysis.Root.PhysicalSize),
                     DisplayFormat.Bytes(analysis.Root.Size),
                     analysis.SkippedPaths);
-                OperationLogger.Info("文件扫描", path + "，" + DisplayFormat.Bytes(analysis.Root.Size));
+                OperationLogger.Info("文件扫描", path + "，物理占用 " + DisplayFormat.Bytes(analysis.Root.PhysicalSize) +
+                    "，逻辑大小 " + DisplayFormat.Bytes(analysis.Root.Size));
             }
             catch (OperationCanceledException)
             {
@@ -258,7 +260,7 @@ namespace ZyperWin__
                     (child.IsDirectory ? "[+] " : "") + child.Name,
                     ProgressText(percent),
                     percent.ToString("0.0") + "%",
-                    DisplayFormat.Bytes(child.Size),
+                    DisplayFormat.Bytes(child.PhysicalSize),
                     DisplayFormat.Bytes(child.Size),
                     child.FileCount.ToString("N0"),
                     child.LastWriteTime == DateTime.MinValue ? "--" : child.LastWriteTime.ToString("yyyy/M/d HH:mm"));
@@ -315,6 +317,7 @@ namespace ZyperWin__
                 if (match == null || match.Size <= 0) continue;
                 filtered.Children.Add(match);
                 filtered.Size += match.Size;
+                filtered.PhysicalSize += match.PhysicalSize;
                 filtered.FileCount += match.FileCount;
             }
             return filtered;

@@ -1,3 +1,4 @@
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -21,13 +22,18 @@ namespace CDriveCleaner.Tests
             Run("Cleanup catalog safety", TestCleanupCatalog);
             Run("Cleanup wildcard paths", TestCleanupWildcardPaths);
             Run("Cleanup per-file selection", TestCleanupFileSelection);
+            Run("Cleanup execution truth", TestCleanupExecution);
             Run("Busy animation lifecycle", TestBusyAnimationLifecycle);
             Run("Final navigation contract", TestFinalNavigation);
             Run("Disk analysis", TestDiskAnalysis);
             Run("Managed file classification", TestManagedFiles);
+            Run("Overwrite delete disclosure", TestOverwriteDelete);
+            Run("Backup roots and restore", TestBackupRootsAndRestore);
+            Run("Uninstall residual identity safety", TestUninstallResidualIdentity);
             Run("Migration catalog contract", TestMigrationCatalog);
             Run("GPU safe operation parsing", TestGpuSafetyParsing);
             Run("Zyper optimization data", TestOptimizationData);
+            Run("Optimization snapshot round trip", TestOptimizationSnapshotRoundTrip);
 
             Console.WriteLine(failures == 0
                 ? "All C DiskGlow tests passed."
@@ -94,6 +100,12 @@ namespace CDriveCleaner.Tests
             Assert(driveRules.Any(rule => rule.Id == "wechat-cache" && rule.Recommended), "WeChat safe cache rule is missing");
             Assert(driveRules.Any(rule => rule.Id == "wechat-records" && rule.ScanOnly), "WeChat records must remain scan-only");
             Assert(driveRules.Any(rule => rule.Id == "qq-cache" && rule.Recommended), "QQ safe cache rule is missing");
+            CleanupRule qqCache = driveRules.Single(rule => rule.Id == "qq-cache");
+            Assert(qqCache.PathTemplates.All(path =>
+                path.IndexOf("Image", StringComparison.OrdinalIgnoreCase) < 0 &&
+                path.IndexOf("Video", StringComparison.OrdinalIgnoreCase) < 0),
+                "QQ recommended cache must not include local images or videos");
+            Assert(driveRules.Any(rule => rule.Id == "qq-media" && !rule.Recommended), "QQ local media must be a separate opt-in rule");
             Assert(driveRules.Any(rule => rule.Id == "qq-records" && rule.ScanOnly), "QQ records must remain scan-only");
             Assert(driveRules.Any(rule => rule.Id == "large-packages" && rule.MinimumBytes == 50L * 1024L * 1024L),
                 "large installer/archive/image scan rule is missing or has the wrong threshold");
@@ -194,6 +206,93 @@ namespace CDriveCleaner.Tests
             }
         }
 
+        private static void TestCleanupExecution()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "CDiskGlowCleanupExecution_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string file = Path.Combine(root, "delete.tmp");
+            try
+            {
+                File.WriteAllBytes(file, new byte[321]);
+                var selection = new CleanupScanResult
+                {
+                    Rule = new CleanupRule { Name = "test", ScanOnly = false },
+                    Files = new List<string> { file },
+                    SelectedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { file },
+                    Roots = new List<string> { root },
+                    FileCount = 1,
+                    Bytes = 999999
+                };
+                CleanupResult result = new CleanupService().CleanAsync(new[] { selection }, null, null, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                Assert(result.DeletedFiles == 1 && result.FailedFiles == 0, "cleanup did not report the real deletion result");
+                Assert(result.Bytes == 321, "cleanup reported scanned bytes instead of actually deleted bytes");
+                Assert(!File.Exists(file), "cleanup returned success but the file still exists");
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        private static void TestOverwriteDelete()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "CDiskGlowOverwrite_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string file = Path.Combine(root, "secret.bin");
+            try
+            {
+                File.WriteAllBytes(file, Enumerable.Repeat((byte)0x5a, 8192).ToArray());
+                FileOperationSummary result = new ManagedFileService().ShredAsync(new[] { file }, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                Assert(result.Success && result.AffectedPaths.Contains(file), "overwrite delete did not complete");
+                Assert(!File.Exists(file), "overwrite delete returned success but the file still exists");
+                Assert(result.Notices.Any(value => value.Contains("不能保证物理不可恢复")), "overwrite delete must disclose storage limitations");
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        private static void TestBackupRootsAndRestore()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "CDiskGlowBackupRoot_" + Guid.NewGuid().ToString("N"));
+            string sourceRoot = Path.Combine(Path.GetTempPath(), "CDiskGlowBackupSource_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            Directory.CreateDirectory(sourceRoot);
+            string source = Path.Combine(sourceRoot, "restore.txt");
+            try
+            {
+                File.WriteAllText(source, "original");
+                BackupRecord record;
+                string error;
+                Assert(BackupStore.TryBackup(source, root, out record, out error), error ?? "backup failed");
+                File.WriteAllText(source, "changed");
+                BackupRecord discovered = BackupStore.ReadRecords().FirstOrDefault(value =>
+                    string.Equals(value.BackupPath, record.BackupPath, StringComparison.OrdinalIgnoreCase));
+                Assert(discovered != null, "backup stored outside the current preferred drive was not discovered");
+                Assert(BackupStore.TryRestore(discovered, out error), error ?? "restore failed");
+                Assert(File.ReadAllText(source) == "original", "restored file content is incorrect");
+            }
+            finally
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+                if (Directory.Exists(sourceRoot)) Directory.Delete(sourceRoot, true);
+            }
+        }
+
+        private static void TestUninstallResidualIdentity()
+        {
+            var app = new InstalledApp
+            {
+                Name = "Demo Tool",
+                InstallLocation = @"C:\Program Files\Demo Tool"
+            };
+            Assert(UninstallService.MatchesApplication(app, @"C:\Program Files\Demo Tool\demo.exe"),
+                "install directory identity should match");
+            Assert(UninstallService.MatchesApplication(app, "Demo Tool"), "exact app name should match");
+            Assert(UninstallService.MatchesApplication(app, "Demo Tool 快捷方式"), "explicit shortcut name should match");
+            Assert(!UninstallService.MatchesApplication(app, "Demo Toolkit Updater"),
+                "generic name substring must not be treated as an uninstall residual");
+            Assert(!UninstallService.MatchesApplication(new InstalledApp { Name = "ABCD" }, "prefix-ABCD-unrelated"),
+                "a four-character substring must not authorize residual deletion");
+        }
+
         private static void TestBusyAnimationLifecycle()
         {
             using (var overlay = new BusyAnimationOverlay())
@@ -262,7 +361,9 @@ namespace CDriveCleaner.Tests
                 DiskAnalysisResult result = service.ScanAsync(root, null, CancellationToken.None).GetAwaiter().GetResult();
                 Assert(result.Root.FileCount == 2, "disk scan should count both files");
                 Assert(result.Root.Size == 384, "disk scan should sum exact bytes");
+                Assert(result.Root.PhysicalSize > 0, "disk scan did not read physical allocation size");
                 Assert(result.Extensions.Any(value => value.Extension == ".txt" && value.Bytes == 256), "extension usage missing");
+                Assert(result.Extensions.Any(value => value.Extension == ".txt" && value.PhysicalBytes > 0), "extension physical usage missing");
                 Assert(result.LargestFiles.First().Size == 256, "largest file ordering failed");
             }
             finally
@@ -280,6 +381,65 @@ namespace CDriveCleaner.Tests
             Assert(items.Count > 100, "optimization catalog is unexpectedly incomplete");
             Assert(items.All(item => item.Element("Optimize") != null), "an optimization entry has no Optimize section");
             Assert(items.All(item => item.Element("Restore") != null), "an optimization entry has no Restore section");
+            var supportedCommands = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "RegWrite", "RegDelete", "SetServiceStart", "ExplorerNotify", "PowerCfg"
+            };
+            Assert(items.SelectMany(item => item.Element("Optimize").Elements())
+                .All(command => supportedCommands.Contains(command.Name.LocalName)),
+                "optimization catalog contains a command without reliable execution support");
+
+            XElement diagnostic = items.Single(item => (string)item.Attribute("name") == "18、禁用诊断服务");
+            Assert((string)diagnostic.Element("Optimize").Element("SetServiceStart").Attribute("Name") == "DPS",
+                "diagnostic service rule must operate on DPS consistently");
+            XElement contacts = items.Single(item => (string)item.Attribute("name") == "9、禁用应用访问联系人");
+            Assert(contacts.Element("Optimize").Elements().All(command =>
+                ((string)command.Attribute("Key") ?? string.Empty).EndsWith(@"ConsentStore\contacts", StringComparison.OrdinalIgnoreCase)),
+                "contacts privacy rule writes to a different key than it checks");
+        }
+
+        private static void TestOptimizationSnapshotRoundTrip()
+        {
+            string id = Guid.NewGuid().ToString("N");
+            string subKey = @"Software\CDiskGlowTests\" + id;
+            string fullKey = @"HKEY_CURRENT_USER\" + subKey;
+            string tag = "test-optimization-" + id;
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(subKey, true))
+                    key.SetValue("Existing", "before", RegistryValueKind.String);
+
+                XElement item = XElement.Parse(
+                    "<Item><Optimize>" +
+                    "<RegWrite Key=\"" + fullKey + "\" Value=\"Existing\" Type=\"REG_SZ\" Data=\"after\" />" +
+                    "<RegWrite Key=\"" + fullKey + "\" Value=\"Created\" Type=\"REG_DWORD\" Data=\"7\" />" +
+                    "<RegWrite Key=\"" + fullKey + "\" Value=\"UnsignedDword\" Type=\"REG_DWORD\" Data=\"4294967295\" />" +
+                    "</Optimize><Restore /></Item>");
+
+                OptimizationExecutionResult applied = ReliableOptimizationExecutor.Apply(item, tag);
+                Assert(applied.Success, applied.Message);
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(subKey, false))
+                {
+                    Assert(Convert.ToString(key.GetValue("Existing")) == "after", "optimization value was not applied");
+                    Assert(Convert.ToInt32(key.GetValue("Created")) == 7, "second optimization command was not applied");
+                    Assert(Convert.ToInt32(key.GetValue("UnsignedDword")) == -1, "unsigned DWORD configuration was not applied");
+                }
+
+                OptimizationExecutionResult restored = ReliableOptimizationExecutor.RestoreLatest(tag);
+                Assert(restored.Success, restored.Message);
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(subKey, false))
+                {
+                    Assert(Convert.ToString(key.GetValue("Existing")) == "before", "original registry value was not restored");
+                    Assert(key.GetValue("Created") == null, "new registry value was not removed during restore");
+                    Assert(key.GetValue("UnsignedDword") == null, "unsigned DWORD value was not removed during restore");
+                }
+                Assert(!ReliableOptimizationExecutor.JournaledTags().Contains(tag), "restored optimization snapshot was not removed");
+            }
+            finally
+            {
+                ReliableOptimizationExecutor.RestoreLatest(tag);
+                Registry.CurrentUser.DeleteSubKeyTree(subKey, false);
+            }
         }
 
         private static void Assert(bool condition, string message)

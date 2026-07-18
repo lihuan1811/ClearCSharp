@@ -31,6 +31,7 @@ namespace ZyperWin__
     {
         public IList<string> AffectedPaths { get; private set; }
         public IList<string> Errors { get; private set; }
+        public IList<string> Notices { get; private set; }
 
         public bool Success { get { return Errors.Count == 0; } }
 
@@ -38,6 +39,7 @@ namespace ZyperWin__
         {
             AffectedPaths = new List<string>();
             Errors = new List<string>();
+            Notices = new List<string>();
         }
 
         public string Message
@@ -45,6 +47,7 @@ namespace ZyperWin__
             get
             {
                 string summary = string.Format("完成 {0} 项，失败 {1} 项。", AffectedPaths.Count, Errors.Count);
+                if (Notices.Count > 0) summary += Environment.NewLine + string.Join(Environment.NewLine, Notices);
                 return Errors.Count == 0 ? summary : summary + Environment.NewLine + string.Join(Environment.NewLine, Errors.Take(12));
             }
         }
@@ -321,6 +324,7 @@ namespace ZyperWin__
         private static FileOperationSummary Shred(IEnumerable<string> paths, CancellationToken cancellationToken)
         {
             var result = new FileOperationSummary();
+            result.Notices.Add("已执行应用层两遍覆盖并删除；SSD/TRIM、压缩、快照、云同步或写时复制存储仍可能保留底层副本，不能保证物理不可恢复。");
             using (RandomNumberGenerator random = RandomNumberGenerator.Create())
             {
                 foreach (string path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
@@ -330,6 +334,7 @@ namespace ZyperWin__
                     {
                         var info = new FileInfo(path);
                         if (!info.Exists) continue;
+                        File.SetAttributes(path, FileAttributes.Normal);
                         using (var stream = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None, 1024 * 1024, FileOptions.WriteThrough))
                         {
                             var buffer = new byte[1024 * 1024];
