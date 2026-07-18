@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -55,6 +56,7 @@ namespace ZyperWin__
             var result = new ProcessResult { ExitCode = -1, Output = string.Empty, Error = string.Empty };
             var output = new StringBuilder();
             var error = new StringBuilder();
+            Encoding processEncoding = OutputEncodingFor(fileName);
 
             using (var process = new Process())
             {
@@ -66,8 +68,8 @@ namespace ZyperWin__
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8
+                    StandardOutputEncoding = processEncoding,
+                    StandardErrorEncoding = processEncoding
                 };
                 process.OutputDataReceived += delegate(object sender, DataReceivedEventArgs args)
                 {
@@ -134,6 +136,24 @@ namespace ZyperWin__
             }
             catch
             {
+            }
+        }
+
+        public static Encoding OutputEncodingFor(string fileName)
+        {
+            string name = Path.GetFileNameWithoutExtension(fileName ?? string.Empty);
+            if (string.Equals(name, "powershell", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name, "pwsh", StringComparison.OrdinalIgnoreCase))
+                return new UTF8Encoding(false, false);
+
+            try
+            {
+                int codePage = CultureInfo.CurrentCulture.TextInfo.OEMCodePage;
+                return Encoding.GetEncoding(codePage);
+            }
+            catch
+            {
+                return Encoding.Default;
             }
         }
     }

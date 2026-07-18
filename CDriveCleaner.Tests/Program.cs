@@ -14,6 +14,7 @@ namespace CDriveCleaner.Tests
         private static int Main()
         {
             Run("Byte formatting", TestByteFormatting);
+            Run("Windows command output encoding", TestCommandOutputEncoding);
             Run("Uninstall command parsing", TestCommandParsing);
             Run("Cleanup catalog safety", TestCleanupCatalog);
             Run("Final navigation contract", TestFinalNavigation);
@@ -47,6 +48,14 @@ namespace CDriveCleaner.Tests
             Assert(DisplayFormat.Bytes(0) == "0 B", "0 bytes should stay in bytes");
             Assert(DisplayFormat.Bytes(1024) == "1.00 KB", "1024 bytes should be 1 KB");
             Assert(DisplayFormat.Bytes(1024L * 1024L * 5L) == "5.00 MB", "5 MiB should format correctly");
+        }
+
+        private static void TestCommandOutputEncoding()
+        {
+            Assert(ProcessRunner.OutputEncodingFor("powershell.exe").CodePage == 65001, "PowerShell output must stay UTF-8");
+            Assert(ProcessRunner.OutputEncodingFor("dism.exe").CodePage ==
+                System.Globalization.CultureInfo.CurrentCulture.TextInfo.OEMCodePage,
+                "native Windows command output must use the local OEM code page");
         }
 
         private static void TestCommandParsing()
