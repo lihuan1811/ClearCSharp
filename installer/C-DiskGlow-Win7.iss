@@ -27,9 +27,6 @@ UninstallDisplayIcon={app}\C DiskGlow.exe
 WizardStyle=modern
 RestartIfNeededByRun=yes
 
-[Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
-
 [Files]
 Source: "{#AppSourceX64}"; DestDir: "{app}"; DestName: "C DiskGlow.exe"; Flags: ignoreversion; Check: IsWin64
 Source: "{#AppSourceX86}"; DestDir: "{app}"; DestName: "C DiskGlow.exe"; Flags: ignoreversion; Check: not IsWin64
