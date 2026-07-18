@@ -1,12 +1,14 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace ZyperWin__
 {
     internal sealed class BusyAnimationOverlay : Control
     {
+        private const uint SpiGetClientAreaAnimation = 0x1042;
         private readonly Timer timer = new Timer();
         private readonly bool animationEnabled;
         private string title = "正在处理";
@@ -22,7 +24,7 @@ namespace ZyperWin__
             Size = new Size(500, 104);
             Visible = false;
             TabStop = false;
-            animationEnabled = SystemInformation.ClientAreaAnimation;
+            animationEnabled = AreClientAnimationsEnabled();
             timer.Interval = 33;
             timer.Tick += delegate
             {
@@ -158,5 +160,26 @@ namespace ZyperWin__
             path.CloseFigure();
             return path;
         }
+
+        private static bool AreClientAnimationsEnabled()
+        {
+            try
+            {
+                bool enabled;
+                return SystemParametersInfo(SpiGetClientAreaAnimation, 0, out enabled, 0) && enabled;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SystemParametersInfo(
+            uint action,
+            uint parameter,
+            [MarshalAs(UnmanagedType.Bool)] out bool value,
+            uint update);
     }
 }
