@@ -191,7 +191,7 @@ namespace ZyperWin__
                 AddRoot(roots, rootPath);
                 string temporary = RootIndexPath + ".tmp";
                 File.WriteAllLines(temporary, roots.OrderBy(value => value).ToArray(), new UTF8Encoding(false));
-                File.Move(temporary, RootIndexPath, true);
+                FileSystemTools.ReplaceFile(temporary, RootIndexPath);
             }
         }
 

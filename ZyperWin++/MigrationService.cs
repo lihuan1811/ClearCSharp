@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -41,16 +42,38 @@ namespace ZyperWin__
         public DateTime CreatedAt { get; set; }
     }
 
+    internal sealed class MigrationTransaction
+    {
+        public string Id { get; set; }
+        public string Operation { get; set; }
+        public string Key { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public List<MigrationTransactionEntry> Entries { get; set; } = new List<MigrationTransactionEntry>();
+    }
+
+    internal sealed class MigrationTransactionEntry
+    {
+        public string LocationKey { get; set; }
+        public string SourcePath { get; set; }
+        public string TargetPath { get; set; }
+        public string Stage { get; set; }
+    }
+
     public sealed class MigrationService
     {
         private const int HwndBroadcast = 0xffff;
         private const int WmSettingChange = 0x001a;
         private const int SmtoAbortIfHung = 0x0002;
         private static readonly object Sync = new object();
+        private static readonly object OperationSync = new object();
         private static readonly string StatePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "CDiskGlow",
             "migration_records.tsv");
+        private static readonly string TransactionPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CDiskGlow",
+            "migration_transaction.tsv");
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern IntPtr SendMessageTimeout(
@@ -64,32 +87,57 @@ namespace ZyperWin__
 
         public Task<IList<MigrationFolder>> ScanAsync(CancellationToken cancellationToken)
         {
-            return Task.Run<IList<MigrationFolder>>(() => Scan(cancellationToken), cancellationToken);
+            return Task.Run<IList<MigrationFolder>>(() =>
+            {
+                lock (OperationSync)
+                {
+                    RecoverIncompleteTransaction();
+                    return Scan(cancellationToken);
+                }
+            }, cancellationToken);
         }
 
         public Task<FileOperationSummary> MigrateAsync(string key, string targetRoot, CancellationToken cancellationToken)
         {
-            return Task.Run(() => Migrate(key, targetRoot, cancellationToken), cancellationToken);
+            return Task.Run(() =>
+            {
+                lock (OperationSync)
+                {
+                    RecoverIncompleteTransaction();
+                    return Migrate(key, targetRoot, cancellationToken);
+                }
+            }, cancellationToken);
         }
 
         public Task<FileOperationSummary> RestoreAsync(string key, CancellationToken cancellationToken)
         {
-            return Task.Run(() => Restore(key, cancellationToken), cancellationToken);
+            return Task.Run(() =>
+            {
+                lock (OperationSync)
+                {
+                    RecoverIncompleteTransaction();
+                    return Restore(key, cancellationToken);
+                }
+            }, cancellationToken);
         }
 
         public Task<FileOperationSummary> RestoreAllAsync(CancellationToken cancellationToken)
         {
             return Task.Run(() =>
             {
-                var combined = new FileOperationSummary();
-                foreach (string key in ReadRecords().Select(record => record.Key).Distinct(StringComparer.OrdinalIgnoreCase).ToList())
+                lock (OperationSync)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    FileOperationSummary result = Restore(key, cancellationToken);
-                    foreach (string path in result.AffectedPaths) combined.AffectedPaths.Add(path);
-                    foreach (string error in result.Errors) combined.Errors.Add(error);
+                    RecoverIncompleteTransaction();
+                    var combined = new FileOperationSummary();
+                    foreach (string key in ReadRecords().Select(record => record.Key).Distinct(StringComparer.OrdinalIgnoreCase).ToList())
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        FileOperationSummary result = Restore(key, cancellationToken);
+                        foreach (string path in result.AffectedPaths) combined.AffectedPaths.Add(path);
+                        foreach (string error in result.Errors) combined.Errors.Add(error);
+                    }
+                    return combined;
                 }
-                return combined;
             }, cancellationToken);
         }
 
@@ -206,12 +254,15 @@ namespace ZyperWin__
                 });
             }
             EnsureCombinedFreeSpace(pending.Select(record => record.SourcePath), targetRootPath, "迁移目标磁盘", cancellationToken);
+            MigrationTransaction transaction = CreateTransaction("Migrate", folder.Key, pending);
+            WriteTransaction(transaction);
 
             try
             {
                 foreach (MigrationRecord record in pending)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    UpdateTransactionStage(transaction, record.LocationKey, "Moving");
                     Directory.CreateDirectory(record.TargetPath);
                     if (Directory.Exists(record.SourcePath))
                     {
@@ -220,13 +271,16 @@ namespace ZyperWin__
                         Directory.Delete(record.SourcePath, false);
                     }
                     else Directory.CreateDirectory(Path.GetDirectoryName(record.SourcePath));
+                    UpdateTransactionStage(transaction, record.LocationKey, "TargetReady");
 
                     FileOperationSummary junction = CreateJunction(record.SourcePath, record.TargetPath, cancellationToken);
                     if (!junction.Success) throw new IOException(string.Join(Environment.NewLine, junction.Errors));
+                    UpdateTransactionStage(transaction, record.LocationKey, "JunctionCreated");
                 }
 
                 if (folder.Locations.Count == 1 && !UpdateRedirect(folder, pending[0].TargetPath, out validationError))
                     throw new IOException(validationError);
+                UpdateAllTransactionStages(transaction, "RedirectUpdated");
 
                 IList<MigrationRecord> records = ReadRecords();
                 foreach (MigrationRecord record in pending)
@@ -237,15 +291,37 @@ namespace ZyperWin__
                     OperationLogger.Info("系统目录迁移", folder.Name + " / " + record.LocationKey + " -> " + record.TargetPath);
                 }
                 WriteRecords(records);
+                DeleteTransaction();
             }
             catch (Exception ex)
             {
+                bool rollbackComplete = true;
                 foreach (MigrationRecord record in pending.AsEnumerable().Reverse())
                 {
                     try { RollbackMigration(record); }
-                    catch (Exception rollbackError) { result.Errors.Add("迁移失败且回滚未完整完成：" + rollbackError.Message); }
+                    catch (Exception rollbackError)
+                    {
+                        rollbackComplete = false;
+                        result.Errors.Add("迁移失败且回滚未完整完成：" + rollbackError.Message);
+                    }
                 }
-                if (folder.Locations.Count == 1) UpdateRedirect(folder, pending[0].SourcePath, out validationError);
+                if (folder.Locations.Count == 1 && !UpdateRedirect(folder, pending[0].SourcePath, out validationError))
+                {
+                    rollbackComplete = false;
+                    result.Errors.Add(validationError);
+                }
+                try
+                {
+                    IList<MigrationRecord> records = ReadRecords();
+                    records = records.Where(value => !pending.Any(record => SameRecord(value, record))).ToList();
+                    WriteRecords(records);
+                }
+                catch (Exception recordError)
+                {
+                    rollbackComplete = false;
+                    result.Errors.Add("迁移记录回滚失败：" + recordError.Message);
+                }
+                if (rollbackComplete) DeleteTransaction();
                 result.Errors.Add("迁移失败：" + ex.Message);
                 OperationLogger.Error("系统目录迁移", folder.Name + "：" + ex.Message);
             }
@@ -274,46 +350,67 @@ namespace ZyperWin__
                 return result;
             }
 
-            var restored = new List<MigrationRecord>();
-            foreach (MigrationRecord record in records.AsEnumerable().Reverse())
+            MigrationTransaction transaction = CreateTransaction("Restore", folder.Key, records);
+            WriteTransaction(transaction);
+            try
             {
-                try
+                foreach (MigrationRecord record in records.AsEnumerable().Reverse())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    UpdateTransactionStage(transaction, record.LocationKey, "Restoring");
                     if (!IsReparsePoint(record.SourcePath)) throw new IOException("原路径已不是本程序创建的目录连接：" + record.SourcePath);
                     FileOperationSummary removed = RemoveJunction(record.SourcePath, cancellationToken);
                     if (!removed.Success) throw new IOException(string.Join(Environment.NewLine, removed.Errors));
                     Directory.CreateDirectory(record.SourcePath);
                     if (Directory.Exists(record.TargetPath)) MoveDirectoryContents(record.TargetPath, record.SourcePath, cancellationToken);
-                    if (folder.Locations.Count == 1)
-                    {
-                        string updateError;
-                        if (!UpdateRedirect(folder, record.SourcePath, out updateError)) throw new IOException(updateError);
-                    }
                     if (Directory.Exists(record.TargetPath) && !Directory.EnumerateFileSystemEntries(record.TargetPath).Any())
                         Directory.Delete(record.TargetPath, false);
-                    restored.Add(record);
+                    UpdateTransactionStage(transaction, record.LocationKey, "SourceRestored");
                     result.AffectedPaths.Add(record.SourcePath);
                     OperationLogger.Info("还原迁移目录", folder.Name + " / " + record.LocationKey + " -> " + record.SourcePath);
                 }
-                catch (Exception ex)
-                {
-                    try
-                    {
-                        RestoreMigratedState(record);
-                        if (folder.Locations.Count == 1)
-                        {
-                            string ignored;
-                            UpdateRedirect(folder, record.TargetPath, out ignored);
-                        }
-                    }
-                    catch { }
-                    result.Errors.Add("还原失败，已尝试恢复迁移状态：" + ex.Message);
-                    OperationLogger.Error("还原迁移目录", folder.Name + "：" + ex.Message);
-                }
-            }
 
-            WriteRecords(allRecords.Where(record => !restored.Contains(record)).ToList());
+                if (folder.Locations.Count == 1)
+                {
+                    string updateError;
+                    if (!UpdateRedirect(folder, records[0].SourcePath, out updateError)) throw new IOException(updateError);
+                }
+                UpdateAllTransactionStages(transaction, "RedirectRestored");
+                WriteRecords(allRecords.Where(record => !records.Any(restored => SameRecord(record, restored))).ToList());
+                DeleteTransaction();
+            }
+            catch (Exception ex)
+            {
+                bool rollbackComplete = true;
+                result.AffectedPaths.Clear();
+                foreach (MigrationRecord record in records)
+                {
+                    try { RestoreMigratedState(record); }
+                    catch (Exception rollbackError)
+                    {
+                        rollbackComplete = false;
+                        result.Errors.Add("还原失败且迁移状态恢复未完整完成：" + rollbackError.Message);
+                    }
+                }
+                if (folder.Locations.Count == 1)
+                {
+                    string updateError;
+                    if (!UpdateRedirect(folder, records[0].TargetPath, out updateError))
+                    {
+                        rollbackComplete = false;
+                        result.Errors.Add(updateError);
+                    }
+                }
+                try { WriteRecords(allRecords); }
+                catch (Exception recordError)
+                {
+                    rollbackComplete = false;
+                    result.Errors.Add("迁移记录恢复失败：" + recordError.Message);
+                }
+                if (rollbackComplete) DeleteTransaction();
+                result.Errors.Add("还原失败，已尝试恢复迁移状态：" + ex.Message);
+                OperationLogger.Error("还原迁移目录", folder.Name + "：" + ex.Message);
+            }
             return result;
         }
 
@@ -353,7 +450,7 @@ namespace ZyperWin__
                 if (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
                     throw new IOException("迁移目标已存在内容，为避免混入旧文件和破坏回滚，未执行迁移：" + target);
                 if (File.Exists(target) || IsReparsePoint(target)) throw new IOException("迁移目标不是可用的普通目录：" + target);
-                string executable = Environment.ProcessPath;
+                string executable = CurrentExecutablePath();
                 if (!string.IsNullOrWhiteSpace(executable) && IsSameOrChild(executable, location.SourcePath))
                     throw new IOException("本程序位于待迁移目录内，请先把程序移动到其它位置。");
                 return true;
@@ -362,6 +459,19 @@ namespace ZyperWin__
             {
                 error = ex.Message;
                 return false;
+            }
+        }
+
+        private static string CurrentExecutablePath()
+        {
+            try
+            {
+                using (System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess())
+                    return process.MainModule == null ? string.Empty : process.MainModule.FileName;
+            }
+            catch
+            {
+                return string.Empty;
             }
         }
 
@@ -623,7 +733,7 @@ namespace ZyperWin__
                 if (!removed.Success) throw new IOException(string.Join(Environment.NewLine, removed.Errors));
             }
             Directory.CreateDirectory(record.SourcePath);
-            if (Directory.Exists(record.TargetPath)) MoveDirectoryContents(record.TargetPath, record.SourcePath, CancellationToken.None);
+            if (Directory.Exists(record.TargetPath)) MergeDirectoryContents(record.TargetPath, record.SourcePath);
             if (Directory.Exists(record.TargetPath) && !Directory.EnumerateFileSystemEntries(record.TargetPath).Any())
                 Directory.Delete(record.TargetPath, false);
         }
@@ -634,11 +744,226 @@ namespace ZyperWin__
             Directory.CreateDirectory(record.TargetPath);
             if (Directory.Exists(record.SourcePath))
             {
-                MoveDirectoryContents(record.SourcePath, record.TargetPath, CancellationToken.None);
+                MergeDirectoryContents(record.SourcePath, record.TargetPath);
                 if (!Directory.EnumerateFileSystemEntries(record.SourcePath).Any()) Directory.Delete(record.SourcePath, false);
             }
             FileOperationSummary created = CreateJunction(record.SourcePath, record.TargetPath, CancellationToken.None);
             if (!created.Success) throw new IOException(string.Join(Environment.NewLine, created.Errors));
+        }
+
+        private static void MergeDirectoryContents(string source, string target)
+        {
+            Directory.CreateDirectory(target);
+            foreach (string directory in Directory.GetDirectories(source))
+            {
+                if (IsReparsePoint(directory)) throw new IOException("恢复目录中包含连接点，无法自动合并：" + directory);
+                string destination = Path.Combine(target, Path.GetFileName(directory));
+                MergeDirectoryContents(directory, destination);
+                if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory, false);
+            }
+            foreach (string file in Directory.GetFiles(source))
+            {
+                string destination = Path.Combine(target, Path.GetFileName(file));
+                if (!File.Exists(destination))
+                {
+                    MoveFileAcrossVolumes(file, destination);
+                    continue;
+                }
+                if (!FilesEqual(file, destination))
+                    throw new IOException("恢复时发现同名但内容不同的文件，已保留两侧数据：" + destination);
+                File.Delete(file);
+            }
+        }
+
+        private static bool FilesEqual(string left, string right)
+        {
+            var leftInfo = new FileInfo(left);
+            var rightInfo = new FileInfo(right);
+            if (leftInfo.Length != rightInfo.Length) return false;
+            using (SHA256 sha = SHA256.Create())
+            using (FileStream leftStream = File.OpenRead(left))
+            using (FileStream rightStream = File.OpenRead(right))
+                return sha.ComputeHash(leftStream).SequenceEqual(sha.ComputeHash(rightStream));
+        }
+
+        private static MigrationTransaction CreateTransaction(string operation, string key, IEnumerable<MigrationRecord> records)
+        {
+            return new MigrationTransaction
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Operation = operation,
+                Key = key,
+                CreatedAt = DateTime.UtcNow,
+                Entries = records.Select(record => new MigrationTransactionEntry
+                {
+                    LocationKey = record.LocationKey,
+                    SourcePath = record.SourcePath,
+                    TargetPath = record.TargetPath,
+                    Stage = "Prepared"
+                }).ToList()
+            };
+        }
+
+        private static void UpdateTransactionStage(MigrationTransaction transaction, string locationKey, string stage)
+        {
+            MigrationTransactionEntry entry = transaction.Entries.FirstOrDefault(value =>
+                string.Equals(value.LocationKey, locationKey, StringComparison.OrdinalIgnoreCase));
+            if (entry == null) throw new InvalidDataException("迁移事务缺少位置：" + locationKey);
+            entry.Stage = stage;
+            WriteTransaction(transaction);
+        }
+
+        private static void UpdateAllTransactionStages(MigrationTransaction transaction, string stage)
+        {
+            foreach (MigrationTransactionEntry entry in transaction.Entries) entry.Stage = stage;
+            WriteTransaction(transaction);
+        }
+
+        private static void RecoverIncompleteTransaction()
+        {
+            MigrationTransaction transaction = ReadTransaction();
+            if (transaction == null) return;
+            try
+            {
+                MigrationFolder folder = Catalog().FirstOrDefault(value =>
+                    string.Equals(value.Key, transaction.Key, StringComparison.OrdinalIgnoreCase));
+                if (folder == null) throw new InvalidDataException("无法识别事务目录：" + transaction.Key);
+
+                IList<MigrationRecord> currentRecords = ReadRecords();
+                List<MigrationRecord> transactionRecords = transaction.Entries.Select(entry => new MigrationRecord
+                {
+                    Key = transaction.Key,
+                    LocationKey = entry.LocationKey,
+                    SourcePath = entry.SourcePath,
+                    TargetPath = entry.TargetPath,
+                    CreatedAt = transaction.CreatedAt
+                }).ToList();
+
+                if (string.Equals(transaction.Operation, "Migrate", StringComparison.OrdinalIgnoreCase))
+                {
+                    bool committed = transactionRecords.All(record =>
+                        currentRecords.Any(value => SameRecord(value, record)) &&
+                        IsReparsePoint(record.SourcePath) && Directory.Exists(record.TargetPath));
+                    if (committed)
+                    {
+                        DeleteTransaction();
+                        OperationLogger.Info("迁移事务恢复", transaction.Key + " 已确认提交完成");
+                        return;
+                    }
+
+                    foreach (MigrationRecord record in transactionRecords.AsEnumerable().Reverse()) RollbackMigration(record);
+                    if (folder.Locations.Count == 1)
+                    {
+                        string redirectError;
+                        if (!UpdateRedirect(folder, transactionRecords[0].SourcePath, out redirectError))
+                            throw new IOException(redirectError);
+                    }
+                    WriteRecords(currentRecords.Where(value => !transactionRecords.Any(record => SameRecord(value, record))).ToList());
+                    DeleteTransaction();
+                    OperationLogger.Info("迁移事务恢复", transaction.Key + " 的未完成迁移已回滚");
+                    return;
+                }
+
+                if (!string.Equals(transaction.Operation, "Restore", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("未知迁移事务类型：" + transaction.Operation);
+
+                bool restoreCommitted = transactionRecords.All(record =>
+                    !currentRecords.Any(value => SameRecord(value, record)) &&
+                    Directory.Exists(record.SourcePath) && !IsReparsePoint(record.SourcePath));
+                if (restoreCommitted)
+                {
+                    DeleteTransaction();
+                    OperationLogger.Info("迁移事务恢复", transaction.Key + " 已确认还原完成");
+                    return;
+                }
+
+                foreach (MigrationRecord record in transactionRecords) RestoreMigratedState(record);
+                if (folder.Locations.Count == 1)
+                {
+                    string redirectError;
+                    if (!UpdateRedirect(folder, transactionRecords[0].TargetPath, out redirectError))
+                        throw new IOException(redirectError);
+                }
+                foreach (MigrationRecord record in transactionRecords)
+                    if (!currentRecords.Any(value => SameRecord(value, record))) currentRecords.Add(record);
+                WriteRecords(currentRecords);
+                DeleteTransaction();
+                OperationLogger.Info("迁移事务恢复", transaction.Key + " 的未完成还原已恢复为迁移状态");
+            }
+            catch (Exception ex)
+            {
+                OperationLogger.Error("迁移事务恢复", transaction.Key + "：" + ex.Message);
+                throw new IOException("检测到未完成的目录迁移事务，但自动恢复失败。为避免覆盖文件，已停止本次操作：" + ex.Message, ex);
+            }
+        }
+
+        private static bool SameRecord(MigrationRecord left, MigrationRecord right)
+        {
+            return string.Equals(left.Key, right.Key, StringComparison.OrdinalIgnoreCase) &&
+                (string.Equals(left.LocationKey, right.LocationKey, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(left.SourcePath, right.SourcePath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static MigrationTransaction ReadTransaction()
+        {
+            lock (Sync)
+            {
+                if (!File.Exists(TransactionPath)) return null;
+                string[] lines = File.ReadAllLines(TransactionPath, Encoding.UTF8);
+                MigrationTransaction transaction = null;
+                foreach (string line in lines)
+                {
+                    string[] fields = line.Split('\t');
+                    if (fields.Length != 8) throw new InvalidDataException("迁移事务日志格式无效。");
+                    string id = Decode(fields[0]);
+                    string operation = Decode(fields[1]);
+                    string key = Decode(fields[2]);
+                    DateTime createdAt = DateTime.Parse(fields[3]).ToUniversalTime();
+                    if (transaction == null)
+                    {
+                        transaction = new MigrationTransaction
+                        {
+                            Id = id,
+                            Operation = operation,
+                            Key = key,
+                            CreatedAt = createdAt
+                        };
+                    }
+                    else if (!string.Equals(transaction.Id, id, StringComparison.Ordinal) ||
+                             !string.Equals(transaction.Operation, operation, StringComparison.Ordinal) ||
+                             !string.Equals(transaction.Key, key, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException("迁移事务日志包含不一致的记录。");
+                    transaction.Entries.Add(new MigrationTransactionEntry
+                    {
+                        LocationKey = Decode(fields[4]),
+                        Stage = Decode(fields[5]),
+                        SourcePath = Decode(fields[6]),
+                        TargetPath = Decode(fields[7])
+                    });
+                }
+                if (transaction == null || transaction.Entries.Count == 0)
+                    throw new InvalidDataException("迁移事务日志为空。");
+                return transaction;
+            }
+        }
+
+        private static void WriteTransaction(MigrationTransaction transaction)
+        {
+            lock (Sync)
+            {
+                string[] lines = transaction.Entries.Select(entry => string.Join("\t",
+                    Encode(transaction.Id), Encode(transaction.Operation), Encode(transaction.Key), transaction.CreatedAt.ToString("o"),
+                    Encode(entry.LocationKey), Encode(entry.Stage), Encode(entry.SourcePath), Encode(entry.TargetPath))).ToArray();
+                WriteAllLinesAtomic(TransactionPath, lines);
+            }
+        }
+
+        private static void DeleteTransaction()
+        {
+            lock (Sync)
+            {
+                if (File.Exists(TransactionPath)) File.Delete(TransactionPath);
+            }
         }
 
         private static IList<MigrationRecord> ReadRecords()
@@ -674,10 +999,42 @@ namespace ZyperWin__
         {
             lock (Sync)
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(StatePath));
                 string[] lines = records.Select(record => string.Join("\t", record.Key, record.LocationKey ?? "primary",
                     Encode(record.SourcePath), Encode(record.TargetPath), record.CreatedAt.ToString("o"))).ToArray();
-                File.WriteAllLines(StatePath, lines, new UTF8Encoding(false));
+                WriteAllLinesAtomic(StatePath, lines);
+            }
+        }
+
+        private static void WriteAllLinesAtomic(string path, string[] lines)
+        {
+            string directory = Path.GetDirectoryName(path);
+            Directory.CreateDirectory(directory);
+            string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            string backup = path + ".bak";
+            try
+            {
+                File.WriteAllLines(temporary, lines, new UTF8Encoding(false));
+                if (File.Exists(path))
+                {
+                    if (File.Exists(backup)) File.Delete(backup);
+                    try
+                    {
+                        File.Replace(temporary, path, backup);
+                    }
+                    catch
+                    {
+                        if (!File.Exists(temporary)) throw;
+                        File.Delete(path);
+                        File.Move(temporary, path);
+                    }
+                    try { if (File.Exists(backup)) File.Delete(backup); }
+                    catch { }
+                }
+                else File.Move(temporary, path);
+            }
+            finally
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
             }
         }
 

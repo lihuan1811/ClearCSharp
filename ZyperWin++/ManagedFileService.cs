@@ -297,13 +297,19 @@ namespace ZyperWin__
         private static FileOperationSummary Delete(IEnumerable<string> paths, CancellationToken cancellationToken)
         {
             var result = new FileOperationSummary();
-            BackupStore.Prune(5000, 1024L * 1024L * 1024L);
+            string backupRoot;
+            bool createBackup = BackupStore.TryGetSpaceReleasingRoot(out backupRoot);
+            if (createBackup)
+                BackupStore.Prune(5000, 1024L * 1024L * 1024L, backupRoot);
+            else
+                result.Notices.Add("未检测到非 C 盘，文件已直接删除且未在 C 盘复制备份，以确保实际释放空间。");
             foreach (string path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!File.Exists(path)) continue;
                 string backupError;
-                if (!BackupStore.TryBackup(path, out backupError))
+                BackupRecord backup;
+                if (createBackup && !BackupStore.TryBackup(path, backupRoot, out backup, out backupError))
                 {
                     result.Errors.Add(backupError);
                     continue;

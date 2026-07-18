@@ -26,6 +26,7 @@ namespace CDriveCleaner.Tests
             Run("Busy animation lifecycle", TestBusyAnimationLifecycle);
             Run("Final navigation contract", TestFinalNavigation);
             Run("Disk analysis", TestDiskAnalysis);
+            Run("Disk analysis memory bound", TestDiskAnalysisMemoryBound);
             Run("Managed file classification", TestManagedFiles);
             Run("Overwrite delete disclosure", TestOverwriteDelete);
             Run("Backup roots and restore", TestBackupRootsAndRestore);
@@ -81,6 +82,17 @@ namespace CDriveCleaner.Tests
             CommandLineTools.SplitExecutable("MsiExec.exe /I{12345678-1234-1234-1234-123456789012}", out executable, out arguments);
             Assert(executable == "MsiExec.exe", "MSI executable parsing failed");
             Assert(arguments.StartsWith("/I", StringComparison.Ordinal), "MSI arguments were lost");
+
+            var app = new InstalledApp
+            {
+                UninstallCommand = "normal-uninstall.exe",
+                QuietUninstallCommand = "quiet-uninstall.exe /silent"
+            };
+            Assert(CommandLineTools.PreferredUninstallCommand(app) == "quiet-uninstall.exe /silent",
+                "quiet uninstall command must be preferred when available");
+            app.QuietUninstallCommand = string.Empty;
+            Assert(CommandLineTools.PreferredUninstallCommand(app) == "normal-uninstall.exe",
+                "normal uninstall command must remain the fallback");
         }
 
         private static void TestCleanupCatalog()
@@ -98,9 +110,18 @@ namespace CDriveCleaner.Tests
                 .SequenceEqual(expectedCategories.OrderBy(value => value)), "cleanup categories no longer match the final PRD");
             Assert(driveRules.Any(rule => rule.ScanOnly && rule.Name.Contains("WinSxS")), "high-risk WinSxS paths must remain scan-only");
             Assert(driveRules.Any(rule => rule.Id == "wechat-cache" && rule.Recommended), "WeChat safe cache rule is missing");
+            CleanupRule wechatCache = driveRules.Single(rule => rule.Id == "wechat-cache");
+            Assert(wechatCache.PathTemplates.Any(path => path.IndexOf("WXWork", StringComparison.OrdinalIgnoreCase) >= 0),
+                "WeCom/WXWork cache roots are missing");
+            Assert(wechatCache.PathTemplates.Any(path => path.IndexOf("xwechat_files", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                path.IndexOf("FileStorage", StringComparison.OrdinalIgnoreCase) >= 0),
+                "xwechat FileStorage cache roots are missing");
             Assert(driveRules.Any(rule => rule.Id == "wechat-records" && rule.ScanOnly), "WeChat records must remain scan-only");
             Assert(driveRules.Any(rule => rule.Id == "qq-cache" && rule.Recommended), "QQ safe cache rule is missing");
             CleanupRule qqCache = driveRules.Single(rule => rule.Id == "qq-cache");
+            Assert(qqCache.PathTemplates.Any(path => path.IndexOf("LOCALAPPDATA", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                path.IndexOf("Tencent\\QQ\\", StringComparison.OrdinalIgnoreCase) >= 0),
+                "legacy LocalAppData QQ cache roots are missing");
             Assert(qqCache.PathTemplates.All(path =>
                 path.IndexOf("Image", StringComparison.OrdinalIgnoreCase) < 0 &&
                 path.IndexOf("Video", StringComparison.OrdinalIgnoreCase) < 0),
@@ -365,6 +386,30 @@ namespace CDriveCleaner.Tests
                 Assert(result.Extensions.Any(value => value.Extension == ".txt" && value.Bytes == 256), "extension usage missing");
                 Assert(result.Extensions.Any(value => value.Extension == ".txt" && value.PhysicalBytes > 0), "extension physical usage missing");
                 Assert(result.LargestFiles.First().Size == 256, "largest file ordering failed");
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        private static void TestDiskAnalysisMemoryBound()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "CDiskGlowBoundedScan_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                for (int index = 0; index < 12; index++)
+                    File.WriteAllBytes(Path.Combine(root, "file-" + index + ".bin"), new byte[index + 1]);
+
+                var service = new DiskAnalysisService(2);
+                DiskAnalysisResult result = service.ScanAsync(root, null, CancellationToken.None).GetAwaiter().GetResult();
+                Assert(result.Root.FileCount == 12, "bounded disk scan lost file counts");
+                Assert(result.Root.Size == 78, "bounded disk scan lost logical bytes");
+                Assert(result.AggregatedFiles == 10, "bounded disk scan did not aggregate excess file nodes");
+                Assert(result.Root.Children.Count == 3, "bounded disk scan retained more file detail than configured");
+                Assert(result.Root.Children.Any(value => value.IsAggregate && value.FileCount == 10),
+                    "bounded disk scan did not expose an aggregate treemap node");
             }
             finally
             {

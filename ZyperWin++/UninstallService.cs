@@ -60,6 +60,14 @@ namespace ZyperWin__
 
     public static class CommandLineTools
     {
+        public static string PreferredUninstallCommand(InstalledApp app)
+        {
+            if (app == null) return string.Empty;
+            return !string.IsNullOrWhiteSpace(app.QuietUninstallCommand)
+                ? app.QuietUninstallCommand
+                : app.UninstallCommand;
+        }
+
         public static void SplitExecutable(string commandLine, out string executable, out string arguments)
         {
             executable = string.Empty;
@@ -177,7 +185,9 @@ namespace ZyperWin__
                                 if (key == null) continue;
                                 string name = Convert.ToString(key.GetValue("DisplayName"), CultureInfo.CurrentCulture);
                                 string uninstall = Convert.ToString(key.GetValue("UninstallString"), CultureInfo.CurrentCulture);
-                                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(uninstall)) continue;
+                                string quietUninstall = Convert.ToString(key.GetValue("QuietUninstallString"), CultureInfo.CurrentCulture);
+                                if (string.IsNullOrWhiteSpace(name) ||
+                                    (string.IsNullOrWhiteSpace(uninstall) && string.IsNullOrWhiteSpace(quietUninstall))) continue;
                                 if (Convert.ToInt32(key.GetValue("SystemComponent", 0), CultureInfo.InvariantCulture) == 1) continue;
 
                                 long estimatedBytes = 0;
@@ -203,7 +213,7 @@ namespace ZyperWin__
                                         RegistryPath = (hive == RegistryHive.LocalMachine ? "HKLM\\" : "HKCU\\") + UninstallPath + "\\" + subKeyName,
                                         EstimatedBytes = estimatedBytes,
                                         UninstallCommand = uninstall,
-                                        QuietUninstallCommand = Convert.ToString(key.GetValue("QuietUninstallString")),
+                                        QuietUninstallCommand = quietUninstall,
                                         Kind = InstalledAppKind.Desktop,
                                         RegistryView = view
                                     };
@@ -251,9 +261,7 @@ namespace ZyperWin__
 
         private static ProcessResult LaunchDesktopUninstaller(InstalledApp app, CancellationToken cancellationToken)
         {
-            string command = string.IsNullOrWhiteSpace(app.UninstallCommand)
-                ? app.QuietUninstallCommand
-                : app.UninstallCommand;
+            string command = CommandLineTools.PreferredUninstallCommand(app);
             string executable;
             string arguments;
             CommandLineTools.SplitExecutable(command, out executable, out arguments);
@@ -553,7 +561,10 @@ namespace ZyperWin__
             if (string.IsNullOrWhiteSpace(app.RegistryPath))
                 return new RegistryEntryProbe { Exists = false, Error = string.Empty };
 
-            DateTime deadline = DateTime.UtcNow.AddSeconds(90);
+            // Bootstrap uninstallers often exit after spawning their real worker.
+            // Keep confirming the registry entry instead of treating launcher exit
+            // as a completed uninstall.
+            DateTime deadline = DateTime.UtcNow.AddMinutes(5);
             RegistryEntryProbe probe;
             do
             {

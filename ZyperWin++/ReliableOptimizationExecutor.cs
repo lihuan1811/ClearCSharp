@@ -111,7 +111,7 @@ namespace ZyperWin__
             catch (Exception ex)
             {
                 string preservedPath = JournalPath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
-                try { File.Move(JournalPath, preservedPath, false); }
+                try { File.Move(JournalPath, preservedPath); }
                 catch { preservedPath = JournalPath; }
                 OperationLogger.Error("系统优化快照", "快照索引损坏，已保留到 " + preservedPath + "：" + ex.Message);
                 return new List<OptimizationBackupRecord>();
@@ -124,7 +124,7 @@ namespace ZyperWin__
             Directory.CreateDirectory(directory);
             string temporary = JournalPath + ".tmp";
             File.WriteAllText(temporary, JsonSerializer.Serialize(records, JsonOptions), new UTF8Encoding(false));
-            File.Move(temporary, JournalPath, true);
+            FileSystemTools.ReplaceFile(temporary, JournalPath);
         }
     }
 
@@ -372,6 +372,11 @@ namespace ZyperWin__
             using RegistryKey key = OpenKey(ServiceRegistryPath(name), true, false)
                 ?? throw new InvalidOperationException("当前系统不存在服务：" + name);
             key.SetValue("Start", startType, RegistryValueKind.DWord);
+
+            // Changing Start alone does not affect a service which is already
+            // running. Disable operations must take effect immediately.
+            if (startType == 4 && QueryServiceState(name) == 4)
+                EnsureServiceRunning(name, false);
         }
 
         private static void ExecuteExplorerCommand(XElement command)
@@ -640,7 +645,7 @@ namespace ZyperWin__
         {
             if (snapshot.Exists)
             {
-                RegistryValueKind kind = Enum.Parse<RegistryValueKind>(snapshot.ValueKind);
+                RegistryValueKind kind = (RegistryValueKind)Enum.Parse(typeof(RegistryValueKind), snapshot.ValueKind);
                 using RegistryKey key = OpenKey(snapshot.Key, true, true) ?? throw new IOException("无法还原注册表键：" + snapshot.Key);
                 key.SetValue(snapshot.ValueName ?? string.Empty, DecodeRegistryValue(snapshot.Data, kind), kind);
                 return;
@@ -674,7 +679,7 @@ namespace ZyperWin__
             bool exists = key.GetValueNames().Contains(snapshot.ValueName ?? string.Empty, StringComparer.OrdinalIgnoreCase);
             if (exists != snapshot.Exists) throw new IOException("注册表值存在状态不一致。");
             if (!snapshot.Exists) return;
-            RegistryValueKind kind = Enum.Parse<RegistryValueKind>(snapshot.ValueKind);
+            RegistryValueKind kind = (RegistryValueKind)Enum.Parse(typeof(RegistryValueKind), snapshot.ValueKind);
             object expected = DecodeRegistryValue(snapshot.Data, kind);
             object actual = key.GetValue(snapshot.ValueName ?? string.Empty, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
             if (!RegistryValuesEqual(actual, expected, kind)) throw new IOException("注册表值与快照不一致。");
@@ -705,7 +710,7 @@ namespace ZyperWin__
         {
             foreach (RegistryTreeValueSnapshot value in tree.Values)
             {
-                RegistryValueKind kind = Enum.Parse<RegistryValueKind>(value.Kind);
+                RegistryValueKind kind = (RegistryValueKind)Enum.Parse(typeof(RegistryValueKind), value.Kind);
                 key.SetValue(value.Name ?? string.Empty, DecodeRegistryValue(value.Data, kind), kind);
             }
             foreach (KeyValuePair<string, RegistryTreeSnapshot> pair in tree.SubKeys)
@@ -724,7 +729,7 @@ namespace ZyperWin__
             foreach (string valueName in actualValueNames)
             {
                 RegistryTreeValueSnapshot expectedValue = expectedValues[valueName];
-                RegistryValueKind expectedKind = Enum.Parse<RegistryValueKind>(expectedValue.Kind);
+                RegistryValueKind expectedKind = (RegistryValueKind)Enum.Parse(typeof(RegistryValueKind), expectedValue.Kind);
                 if (key.GetValueKind(valueName) != expectedKind) throw new IOException("注册表值类型不一致：" + valueName);
                 object actual = key.GetValue(valueName, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
                 object expectedData = DecodeRegistryValue(expectedValue.Data, expectedKind);

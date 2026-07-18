@@ -1,4 +1,4 @@
-name: Windows self-contained release
+name: Windows multi-version release
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-test-release:
     runs-on: windows-2022
-    timeout-minutes: 35
+    timeout-minutes: 55
 
     steps:
       - name: Checkout
@@ -32,7 +32,7 @@ jobs:
 
       - name: Run regression tests
         shell: pwsh
-        run: dotnet run --project ".\CDriveCleaner.Tests\CDriveCleaner.Tests.csproj" -c Release --no-build
+        run: dotnet run --project ".\CDriveCleaner.Tests\CDriveCleaner.Tests.csproj" -c Release -f net8.0-windows --no-build
 
       - name: Publish self-contained executables
         shell: pwsh
@@ -40,6 +40,7 @@ jobs:
           $common = @(
             '.\ZyperWin++\ZyperWin++.csproj',
             '-c', 'Release',
+            '-f', 'net8.0-windows',
             '--self-contained', 'true',
             '-p:PublishSingleFile=true',
             '-p:IncludeNativeLibrariesForSelfExtract=true',
@@ -52,6 +53,17 @@ jobs:
           dotnet publish @common -r win-x64 -o '.\publish\win-x64'
           dotnet publish @common -r win-x86 -o '.\publish\win-x86'
 
+      - name: Publish Windows 7 SP1 .NET Framework executables
+        shell: pwsh
+        run: |
+          $project = '.\ZyperWin++\ZyperWin++.csproj'
+          dotnet publish $project -c Release -f net48 -r win-x64 --self-contained false `
+            -p:PlatformTarget=x64 -p:Prefer32Bit=false -p:DebugType=None -p:DebugSymbols=false `
+            -o '.\publish\net48-win-x64'
+          dotnet publish $project -c Release -f net48 -r win-x86 --self-contained false `
+            -p:PlatformTarget=x86 -p:Prefer32Bit=true -p:DebugType=None -p:DebugSymbols=false `
+            -o '.\publish\net48-win-x86'
+
       - name: Run published executable startup smoke tests
         shell: pwsh
         run: |
@@ -59,6 +71,29 @@ jobs:
             Remove-Item '.\smoke-test-ok.txt', '.\smoke-test-error.txt', '.\smoke-test-trace.txt' -Force -ErrorAction SilentlyContinue
             $exe = ".\publish\$rid\C DiskGlow.exe"
             $process = Start-Process $exe -ArgumentList '--smoke-test' -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+              if (Test-Path '.\smoke-test-trace.txt') { Get-Content '.\smoke-test-trace.txt' }
+              if (Test-Path '.\smoke-test-error.txt') { Get-Content '.\smoke-test-error.txt' }
+              throw "$rid executable smoke test failed with exit code $($process.ExitCode)."
+            }
+            if (-not (Test-Path '.\smoke-test-ok.txt')) {
+              throw "$rid executable smoke test did not write its success marker."
+            }
+          }
+
+      - name: Run .NET Framework single-executable smoke tests
+        shell: pwsh
+        run: |
+          foreach ($rid in @('net48-win-x64', 'net48-win-x86')) {
+            Remove-Item '.\smoke-test-ok.txt', '.\smoke-test-error.txt', '.\smoke-test-trace.txt' -Force -ErrorAction SilentlyContinue
+            $source = Get-Item ".\publish\$rid\C DiskGlow.exe"
+            if ($source.Length -lt 2000000) {
+              throw "$rid executable is too small to contain its managed dependencies: $($source.Length) bytes."
+            }
+            $isolated = ".\publish\isolated-$rid"
+            New-Item -ItemType Directory -Force $isolated | Out-Null
+            Copy-Item $source.FullName "$isolated\C DiskGlow.exe"
+            $process = Start-Process "$isolated\C DiskGlow.exe" -ArgumentList '--smoke-test' -Wait -PassThru
             if ($process.ExitCode -ne 0) {
               if (Test-Path '.\smoke-test-trace.txt') { Get-Content '.\smoke-test-trace.txt' }
               if (Test-Path '.\smoke-test-error.txt') { Get-Content '.\smoke-test-error.txt' }
@@ -93,6 +128,38 @@ jobs:
             }
             Write-Host "Validated $rid $($exe.Length) bytes"
           }
+          foreach ($rid in @('net48-win-x64', 'net48-win-x86')) {
+            $exe = Get-Item ".\publish\$rid\C DiskGlow.exe"
+            & $mt.FullName -nologo "-inputresource:$($exe.FullName);#1" "-out:embedded-$rid.manifest"
+            $manifest = Get-Content "embedded-$rid.manifest" -Raw
+            if ($manifest -notmatch 'requireAdministrator') {
+              throw "$rid administrator manifest was not embedded."
+            }
+          }
+
+      - name: Build Windows 7 dependency-bundled installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force '.\publish\redist', '.\artifacts' | Out-Null
+          $framework = (Resolve-Path '.\publish\redist').Path + '\ndp48-x86-x64-allos-enu.exe'
+          curl.exe -fL 'https://go.microsoft.com/fwlink/?linkid=2088631' -o $framework
+          $signature = Get-AuthenticodeSignature $framework
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft') {
+            throw "The downloaded .NET Framework installer does not have a valid Microsoft signature."
+          }
+
+          choco install innosetup --no-progress -y
+          $iscc = Get-ChildItem ${env:ProgramFiles(x86)} -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $iscc) { throw 'Inno Setup compiler was not found.' }
+          $x64 = (Resolve-Path '.\publish\net48-win-x64\C DiskGlow.exe').Path
+          $x86 = (Resolve-Path '.\publish\net48-win-x86\C DiskGlow.exe').Path
+          $output = (Resolve-Path '.\artifacts').Path
+          & $iscc.FullName "/DAppSourceX64=$x64" "/DAppSourceX86=$x86" "/DFxSource=$framework" "/O$output" '.\installer\C-DiskGlow-Win7.iss'
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE." }
+          if (-not (Test-Path '.\artifacts\C-DiskGlow-Windows7-SP1-x86-x64-setup.exe')) {
+            throw 'Windows 7 setup executable was not generated.'
+          }
 
       - name: Package artifacts
         shell: pwsh
@@ -100,6 +167,8 @@ jobs:
           New-Item -ItemType Directory -Force artifacts | Out-Null
           Copy-Item '.\publish\win-x64\C DiskGlow.exe' '.\artifacts\C-DiskGlow-win-x64-self-contained.exe'
           Copy-Item '.\publish\win-x86\C DiskGlow.exe' '.\artifacts\C-DiskGlow-win-x86-self-contained.exe'
+          Copy-Item '.\publish\net48-win-x64\C DiskGlow.exe' '.\artifacts\C-DiskGlow-win7-net48-x64.exe'
+          Copy-Item '.\publish\net48-win-x86\C DiskGlow.exe' '.\artifacts\C-DiskGlow-win7-net48-x86.exe'
           Get-ChildItem '.\artifacts\*.exe' | Sort-Object Name | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)"
@@ -108,7 +177,7 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: C-DiskGlow-self-contained-${{ github.run_number }}
+          name: C-DiskGlow-Windows-${{ github.run_number }}
           path: artifacts/*
 
       - name: Publish GitHub release
@@ -117,5 +186,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "csharp-self-contained-${{ github.run_number }}"
-          gh release create $tag artifacts/* --title "C DiskGlow self-contained build ${{ github.run_number }}" --notes "Windows 10/11 self-contained single-file builds. No separate .NET installation is required. Choose x64 for normal 64-bit Windows or x86 for 32-bit Windows."
+          $tag = "csharp-windows-${{ github.run_number }}"
+          gh release create $tag artifacts/* --title "C DiskGlow Windows build ${{ github.run_number }}" --notes "Windows 10/11: use the x64 or x86 self-contained executable; no .NET installation is required. Windows 7 SP1: use C-DiskGlow-Windows7-SP1-x86-x64-setup.exe; it automatically installs the bundled Microsoft .NET Framework 4.8 when missing. The smaller win7-net48 executables are for machines that already have .NET Framework 4.8."

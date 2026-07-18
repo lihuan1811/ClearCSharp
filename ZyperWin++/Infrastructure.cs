@@ -10,6 +10,33 @@ using System.Threading.Tasks;
 
 namespace ZyperWin__
 {
+    internal static class FileSystemTools
+    {
+        public static void ReplaceFile(string temporaryPath, string destinationPath)
+        {
+            if (!File.Exists(destinationPath))
+            {
+                File.Move(temporaryPath, destinationPath);
+                return;
+            }
+
+            string backupPath = destinationPath + ".bak";
+            if (File.Exists(backupPath)) File.Delete(backupPath);
+            try
+            {
+                File.Replace(temporaryPath, destinationPath, backupPath);
+            }
+            catch
+            {
+                if (!File.Exists(temporaryPath)) throw;
+                File.Delete(destinationPath);
+                File.Move(temporaryPath, destinationPath);
+            }
+            try { if (File.Exists(backupPath)) File.Delete(backupPath); }
+            catch { }
+        }
+    }
+
     internal static class AppPalette
     {
         public static readonly Color Green = Color.FromArgb(15, 143, 95);
@@ -135,12 +162,36 @@ namespace ZyperWin__
 
         private static void TryKill(Process process)
         {
+            if (process == null) return;
             try
             {
-                if (!process.HasExited) process.Kill();
+                if (process.HasExited) return;
+
+                // taskkill /T also terminates cmd and PowerShell descendants.
+                using (var killer = new Process())
+                {
+                    killer.StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "taskkill.exe",
+                        Arguments = "/PID " + process.Id + " /T /F",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = false,
+                        RedirectStandardError = false
+                    };
+                    killer.Start();
+                    killer.WaitForExit(10000);
+                }
             }
             catch
             {
+                try
+                {
+                    if (!process.HasExited) process.Kill();
+                }
+                catch
+                {
+                }
             }
         }
 

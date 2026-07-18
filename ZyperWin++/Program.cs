@@ -28,7 +28,12 @@ namespace ZyperWin__
 
         private static int RunApplication(string[] args)
         {
+#if NETFRAMEWORK
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+#else
             ApplicationConfiguration.Initialize();
+#endif
             if (Array.Exists(args ?? new string[0], value => string.Equals(value, "--smoke-test", StringComparison.OrdinalIgnoreCase)))
                 return RunSmokeTest();
 

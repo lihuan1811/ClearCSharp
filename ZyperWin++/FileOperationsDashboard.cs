@@ -251,7 +251,12 @@ namespace ZyperWin__
         {
             List<string> paths = RequireSelection();
             if (paths == null) return;
-            await RunOperationAsync("批量删除", "将删除 " + paths.Count + " 个文件。删除前会写入全局备份，可在底部“一键还原”恢复。\n\n是否继续？",
+            string backupRoot;
+            bool hasExternalBackup = BackupStore.TryGetSpaceReleasingRoot(out backupRoot);
+            string warning = hasExternalBackup
+                ? "将删除 " + paths.Count + " 个文件。删除前会备份到非 C 盘，可在底部“一键还原”恢复。\n备份位置：" + backupRoot
+                : "将永久删除 " + paths.Count + " 个文件。当前没有可用的非 C 盘，因此不会在 C 盘创建副本；删除后无法通过本工具还原。";
+            await RunOperationAsync("批量删除", warning + "\n\n是否继续？",
                 token => service.DeleteAsync(paths, token));
         }
 

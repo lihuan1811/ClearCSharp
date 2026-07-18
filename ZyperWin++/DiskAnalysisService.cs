@@ -18,6 +18,7 @@ namespace ZyperWin__
         public long FileCount { get; set; }
         public DateTime LastWriteTime { get; set; }
         public List<DiskNode> Children { get; set; }
+        public bool IsAggregate { get; set; }
 
         public DiskNode()
         {
@@ -29,6 +30,7 @@ namespace ZyperWin__
             get
             {
                 if (IsDirectory) return "文件夹";
+                if (IsAggregate) return "其他文件";
                 string extension = Path.GetExtension(Name);
                 return string.IsNullOrWhiteSpace(extension) ? "无扩展名" : extension.ToLowerInvariant();
             }
@@ -49,6 +51,7 @@ namespace ZyperWin__
         public IList<ExtensionUsage> Extensions { get; set; }
         public IList<DiskNode> LargestFiles { get; set; }
         public int SkippedPaths { get; set; }
+        public long AggregatedFiles { get; set; }
     }
 
     public sealed class DiskAnalysisService
@@ -56,13 +59,36 @@ namespace ZyperWin__
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern uint GetCompressedFileSize(string fileName, out uint fileSizeHigh);
 
+        [DllImport("kernel32.dll")]
+        private static extern void SetLastError(uint errorCode);
+
+        private readonly int maximumRetainedFileNodes;
+
+        public DiskAnalysisService()
+            : this(50000)
+        {
+        }
+
+        internal DiskAnalysisService(int maximumRetainedFileNodes)
+        {
+            this.maximumRetainedFileNodes = Math.Max(0, maximumRetainedFileNodes);
+        }
+
         private sealed class ScanState
         {
             public readonly Dictionary<string, ExtensionUsage> Extensions =
                 new Dictionary<string, ExtensionUsage>(StringComparer.OrdinalIgnoreCase);
             public readonly List<DiskNode> LargestFiles = new List<DiskNode>();
+            public readonly int MaximumRetainedFileNodes;
+            public int RetainedFileNodes;
             public long VisitedFiles;
+            public long AggregatedFiles;
             public int SkippedPaths;
+
+            public ScanState(int maximumRetainedFileNodes)
+            {
+                MaximumRetainedFileNodes = maximumRetainedFileNodes;
+            }
         }
 
         public Task<DiskAnalysisResult> ScanAsync(
@@ -75,8 +101,8 @@ namespace ZyperWin__
                 if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
                     throw new DirectoryNotFoundException("目录不存在：" + rootPath);
 
-                var state = new ScanState();
-                DiskNode root = ScanDirectory(new DirectoryInfo(rootPath), state, progress, cancellationToken);
+                var state = new ScanState(maximumRetainedFileNodes);
+                DiskNode root = ScanDirectory(new DirectoryInfo(rootPath), state, progress, cancellationToken, null);
                 state.LargestFiles.Sort(delegate(DiskNode left, DiskNode right) { return right.Size.CompareTo(left.Size); });
                 if (state.LargestFiles.Count > 500) state.LargestFiles.RemoveRange(500, state.LargestFiles.Count - 500);
 
@@ -87,8 +113,26 @@ namespace ZyperWin__
                         .OrderByDescending(value => value.Bytes)
                         .ToList(),
                     LargestFiles = state.LargestFiles,
-                    SkippedPaths = state.SkippedPaths
+                    SkippedPaths = state.SkippedPaths,
+                    AggregatedFiles = state.AggregatedFiles
                 };
+            }, cancellationToken);
+        }
+
+        public Task<DiskNode> ScanExtensionAsync(
+            string rootPath,
+            string extension,
+            IProgress<string> progress,
+            CancellationToken cancellationToken)
+        {
+            return Task.Run(() =>
+            {
+                if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
+                    throw new DirectoryNotFoundException("目录不存在：" + rootPath);
+                if (string.IsNullOrWhiteSpace(extension))
+                    throw new ArgumentException("文件类型不能为空。", nameof(extension));
+                var state = new ScanState(maximumRetainedFileNodes);
+                return ScanDirectory(new DirectoryInfo(rootPath), state, progress, cancellationToken, extension);
             }, cancellationToken);
         }
 
@@ -96,7 +140,8 @@ namespace ZyperWin__
             DirectoryInfo directory,
             ScanState state,
             IProgress<string> progress,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string extensionFilter)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var node = new DiskNode
@@ -115,9 +160,11 @@ namespace ZyperWin__
                 files = new FileInfo[0];
             }
 
+            DiskNode aggregate = null;
             foreach (FileInfo file in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (!MatchesExtension(file.Name, extensionFilter)) continue;
                 long length;
                 try { length = file.Length; }
                 catch
@@ -136,7 +183,30 @@ namespace ZyperWin__
                     FileCount = 1,
                     LastWriteTime = SafeLastWrite(file)
                 };
-                node.Children.Add(fileNode);
+                if (state.RetainedFileNodes < state.MaximumRetainedFileNodes)
+                {
+                    node.Children.Add(fileNode);
+                    state.RetainedFileNodes++;
+                }
+                else
+                {
+                    if (aggregate == null)
+                    {
+                        aggregate = new DiskNode
+                        {
+                            Name = "其他文件",
+                            FullPath = directory.FullName,
+                            IsDirectory = false,
+                            IsAggregate = true,
+                            LastWriteTime = DateTime.MinValue
+                        };
+                    }
+                    aggregate.Size += fileNode.Size;
+                    aggregate.PhysicalSize += fileNode.PhysicalSize;
+                    aggregate.FileCount++;
+                    if (fileNode.LastWriteTime > aggregate.LastWriteTime) aggregate.LastWriteTime = fileNode.LastWriteTime;
+                    state.AggregatedFiles++;
+                }
                 node.Size += length;
                 node.PhysicalSize += fileNode.PhysicalSize;
                 node.FileCount++;
@@ -146,6 +216,12 @@ namespace ZyperWin__
                 state.VisitedFiles++;
                 if (progress != null && state.VisitedFiles % 250 == 0)
                     progress.Report(string.Format("已扫描 {0:N0} 个文件：{1}", state.VisitedFiles, directory.FullName));
+            }
+
+            if (aggregate != null)
+            {
+                aggregate.Name = string.Format("其他文件（{0:N0} 个）", aggregate.FileCount);
+                node.Children.Add(aggregate);
             }
 
             DirectoryInfo[] directories;
@@ -162,7 +238,8 @@ namespace ZyperWin__
                 try
                 {
                     if ((child.Attributes & FileAttributes.ReparsePoint) != 0) continue;
-                    DiskNode childNode = ScanDirectory(child, state, progress, cancellationToken);
+                    DiskNode childNode = ScanDirectory(child, state, progress, cancellationToken, extensionFilter);
+                    if (!string.IsNullOrWhiteSpace(extensionFilter) && childNode.FileCount == 0) continue;
                     node.Children.Add(childNode);
                     node.Size += childNode.Size;
                     node.PhysicalSize += childNode.PhysicalSize;
@@ -180,6 +257,14 @@ namespace ZyperWin__
 
             node.Children.Sort(delegate(DiskNode left, DiskNode right) { return right.Size.CompareTo(left.Size); });
             return node;
+        }
+
+        private static bool MatchesExtension(string fileName, string extensionFilter)
+        {
+            if (string.IsNullOrWhiteSpace(extensionFilter)) return true;
+            string extension = Path.GetExtension(fileName);
+            string normalized = string.IsNullOrWhiteSpace(extension) ? "无扩展名" : extension.ToLowerInvariant();
+            return string.Equals(normalized, extensionFilter, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void AddExtension(ScanState state, DiskNode file)
@@ -221,7 +306,7 @@ namespace ZyperWin__
         internal static long ReadPhysicalSize(string path, long fallbackLength)
         {
             uint high;
-            Marshal.SetLastPInvokeError(0);
+            SetLastError(0);
             uint low = GetCompressedFileSize(path, out high);
             int error = Marshal.GetLastWin32Error();
             if (low == uint.MaxValue && error != 0) return fallbackLength;

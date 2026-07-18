@@ -220,11 +220,12 @@ namespace ZyperWin__
                 ShowNode(currentNode);
                 PopulateExtensions();
                 status.Text = string.Format(
-                    "扫描完成：{0:N0} 个文件，物理占用 {1}，逻辑大小 {2}，跳过 {3:N0} 个无权限路径。",
+                    "扫描完成：{0:N0} 个文件，物理占用 {1}，逻辑大小 {2}，跳过 {3:N0} 个无权限路径{4}。",
                     analysis.Root.FileCount,
                     DisplayFormat.Bytes(analysis.Root.PhysicalSize),
                     DisplayFormat.Bytes(analysis.Root.Size),
-                    analysis.SkippedPaths);
+                    analysis.SkippedPaths,
+                    analysis.AggregatedFiles > 0 ? "，其中 " + analysis.AggregatedFiles.ToString("N0") + " 个文件已合并显示以控制内存" : string.Empty);
                 OperationLogger.Info("文件扫描", path + "，物理占用 " + DisplayFormat.Bytes(analysis.Root.PhysicalSize) +
                     "，逻辑大小 " + DisplayFormat.Bytes(analysis.Root.Size));
             }
@@ -288,14 +289,49 @@ namespace ZyperWin__
             }
         }
 
-        private void ExtensionGrid_CellClick(object sender, DataGridViewCellEventArgs e)
+        private async void ExtensionGrid_CellClick(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0 || currentNode == null) return;
             selectedExtension = Convert.ToString(extensionGrid.Rows[e.RowIndex].Tag);
-            treemap.Root = FilterNode(currentNode, selectedExtension);
-            status.Text = string.IsNullOrWhiteSpace(selectedExtension)
-                ? "方格图已显示全部文件类型。"
-                : "方格图仅显示 " + selectedExtension + " 文件，再次点击“全部”可恢复。";
+            if (string.IsNullOrWhiteSpace(selectedExtension))
+            {
+                treemap.Root = currentNode;
+                status.Text = "方格图已显示全部文件类型。";
+                return;
+            }
+
+            if (cancellation != null) return;
+            cancellation = new CancellationTokenSource();
+            SetBusy(true);
+            status.Text = "正在生成 " + selectedExtension + " 的精确方格图...";
+            busyOverlay.Start("正在筛选文件类型", selectedExtension);
+            try
+            {
+                DiskNode filtered = await service.ScanExtensionAsync(
+                    currentNode.FullPath,
+                    selectedExtension,
+                    new Progress<string>(value => busyOverlay.UpdateMessage(DisplayFormat.SingleLine(value, 90))),
+                    cancellation.Token);
+                treemap.Root = filtered;
+                status.Text = string.Format("{0}：{1:N0} 个文件，共 {2}。点击“全部”恢复完整方格图。",
+                    selectedExtension, filtered.FileCount, DisplayFormat.Bytes(filtered.Size));
+            }
+            catch (OperationCanceledException)
+            {
+                status.Text = "文件类型筛选已取消。";
+            }
+            catch (Exception ex)
+            {
+                status.Text = "文件类型筛选失败：" + ex.Message;
+                OperationLogger.Error("文件类型筛选", ex.Message);
+            }
+            finally
+            {
+                cancellation.Dispose();
+                cancellation = null;
+                busyOverlay.Stop();
+                if (!IsDisposed) SetBusy(false);
+            }
         }
 
         private static DiskNode FilterNode(DiskNode node, string extension)
@@ -327,12 +363,32 @@ namespace ZyperWin__
         {
             if (e.RowIndex < 0) return;
             var node = fileGrid.Rows[e.RowIndex].Tag as DiskNode;
-            if (node != null && node.IsDirectory) ShowNode(node);
+            if (node != null && node.IsDirectory)
+            {
+                selectedExtension = null;
+                ShowNode(node);
+            }
         }
 
         private void Treemap_NodeSelected(object sender, DiskNodeEventArgs e)
         {
-            if (e.Node != null && e.Node.IsDirectory) ShowNode(e.Node);
+            if (e.Node == null || !e.Node.IsDirectory) return;
+            DiskNode original = analysis == null ? null : FindNodeByPath(analysis.Root, e.Node.FullPath);
+            selectedExtension = null;
+            ShowNode(original ?? e.Node);
+        }
+
+        private static DiskNode FindNodeByPath(DiskNode root, string fullPath)
+        {
+            if (root == null) return null;
+            if (string.Equals(root.FullPath, fullPath, StringComparison.OrdinalIgnoreCase)) return root;
+            foreach (DiskNode child in root.Children)
+            {
+                if (!child.IsDirectory) continue;
+                DiskNode match = FindNodeByPath(child, fullPath);
+                if (match != null) return match;
+            }
+            return null;
         }
 
         private void NavigateToParent()

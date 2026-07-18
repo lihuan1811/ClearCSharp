@@ -402,8 +402,6 @@ namespace ZyperWin__
 
         private static bool IsChkdskScheduled(string commandOutput)
         {
-            string systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? string.Empty;
-            if (string.Equals(systemDrive.TrimEnd('\\'), "C:", StringComparison.OrdinalIgnoreCase)) return true;
             if (Regex.IsMatch(commandOutput ?? string.Empty,
                 @"(?is)scheduled.+next.+(?:restart|reboot)|下次.*(?:启动|重新启动).*检查")) return true;
             try
