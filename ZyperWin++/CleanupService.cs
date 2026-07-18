@@ -34,6 +34,7 @@ namespace ZyperWin__
         public long Bytes { get; set; }
         public int FileCount { get; set; }
         public List<string> Files { get; set; }
+        public HashSet<string> SelectedFiles { get; set; }
         public List<string> Roots { get; set; }
     }
 
@@ -213,6 +214,25 @@ namespace ZyperWin__
 
     public sealed class CleanupService
     {
+        internal static CleanupScanResult CreateSelection(CleanupScanResult source)
+        {
+            var files = source.Files.Where(source.SelectedFiles.Contains).ToList();
+            long bytes = 0;
+            foreach (string path in files)
+            {
+                try { bytes += new FileInfo(path).Length; } catch { }
+            }
+            return new CleanupScanResult
+            {
+                Rule = source.Rule,
+                Files = files,
+                SelectedFiles = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase),
+                Roots = source.Roots.ToList(),
+                FileCount = files.Count,
+                Bytes = bytes
+            };
+        }
+
         public Task<IList<CleanupScanResult>> ScanAsync(
             CleanupKind kind,
             IProgress<string> progress,
@@ -231,6 +251,7 @@ namespace ZyperWin__
                     {
                         Rule = rule,
                         Files = new List<string>(),
+                        SelectedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase),
                         Roots = new List<string>()
                     };
 
@@ -252,6 +273,9 @@ namespace ZyperWin__
                         }
                     }
 
+                    if (rule.Recommended && !rule.ScanOnly)
+                        result.SelectedFiles.UnionWith(result.Files);
+
                     results.Add(result);
                 }
                 return results;
@@ -260,13 +284,15 @@ namespace ZyperWin__
 
         public Task<CleanupResult> CleanAsync(
             IEnumerable<CleanupScanResult> selected,
+            string backupRoot,
             IProgress<string> progress,
             CancellationToken cancellationToken)
         {
             return Task.Run(() =>
             {
                 var result = new CleanupResult();
-                BackupStore.Prune(5000, 1024L * 1024L * 1024L);
+                bool createBackup = !string.IsNullOrWhiteSpace(backupRoot);
+                if (createBackup) BackupStore.Prune(5000, 1024L * 1024L * 1024L, backupRoot);
                 foreach (CleanupScanResult item in selected)
                 {
                     if (item.Rule.ScanOnly)
@@ -284,7 +310,8 @@ namespace ZyperWin__
                             long length = 0;
                             try { length = new FileInfo(file).Length; } catch { }
                             string backupError;
-                            if (!BackupStore.TryBackup(file, out backupError))
+                            BackupRecord backup;
+                            if (createBackup && !BackupStore.TryBackup(file, backupRoot, out backup, out backupError))
                             {
                                 result.FailedFiles++;
                                 OperationLogger.Error("清理备份", backupError);

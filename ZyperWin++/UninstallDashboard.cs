@@ -231,6 +231,7 @@ namespace ZyperWin__
             progress.Value = 0;
             int succeeded = 0;
             var failures = new List<string>();
+            var residuals = new List<UninstallResidualScan>();
             try
             {
                 for (int index = 0; index < selected.Count; index++)
@@ -241,16 +242,44 @@ namespace ZyperWin__
                     if (result.Success)
                     {
                         succeeded++;
-                        if (force && app.Kind == InstalledAppKind.Desktop)
+                        if (app.Kind == InstalledAppKind.Desktop)
                         {
-                            ProcessResult residual = await service.CleanResidualsAsync(app, true, operationCancellation.Token);
-                            if (!residual.Success) failures.Add(app.Name + " 残留：" + residual.Error);
+                            if (force)
+                            {
+                                ProcessResult residual = await service.CleanResidualsAsync(app, true, operationCancellation.Token);
+                                if (!residual.Success) failures.Add(app.Name + " 残留：" + residual.Error);
+                            }
+                            else
+                            {
+                                status.Text = "正在扫描卸载残留：" + app.Name;
+                                await Task.Delay(1200, operationCancellation.Token);
+                                UninstallResidualScan scan = await service.ScanResidualsAsync(app, operationCancellation.Token);
+                                if (scan.Count > 0) residuals.Add(scan);
+                            }
                         }
                     }
                     else failures.Add(app.Name + "：" + (string.IsNullOrWhiteSpace(result.Error) ? "卸载命令失败" : result.Error));
                     progress.Value = index + 1;
                 }
-                status.Text = string.Format("卸载完成：成功 {0}，失败 {1}。", succeeded, failures.Count);
+                int cleanedResiduals = 0;
+                if (!force && residuals.Count > 0)
+                {
+                    string summary = string.Join(Environment.NewLine, residuals.Take(8).Select(value => value.Summary()));
+                    if (MessageBox.Show("卸载完成后检测到 " + residuals.Sum(value => value.Count) + " 项残留：\n\n" + summary +
+                        "\n\n是否立即一键清理这些注册表项、启动项、快捷方式和安装目录？",
+                        "发现卸载残留", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                    {
+                        foreach (UninstallResidualScan scan in residuals)
+                        {
+                            status.Text = "正在清理卸载残留：" + scan.App.Name;
+                            ProcessResult clean = await service.CleanResidualsAsync(scan.App, true, operationCancellation.Token);
+                            if (clean.Success) cleanedResiduals += scan.Count;
+                            else failures.Add(scan.App.Name + " 残留：" + clean.Error);
+                        }
+                    }
+                }
+                status.Text = string.Format("卸载完成：成功 {0}，失败 {1}，发现残留 {2} 项，已清理 {3} 项。",
+                    succeeded, failures.Count, residuals.Sum(value => value.Count), cleanedResiduals);
                 OperationLogger.Info("软件卸载", status.Text);
                 if (failures.Count > 0)
                     MessageBox.Show(string.Join(Environment.NewLine, failures.Take(10)), "部分卸载失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -286,13 +315,21 @@ namespace ZyperWin__
                 MessageBox.Show("请选择一个桌面应用。", "C DiskGlow", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            if (MessageBox.Show("将导出卸载注册表备份，并清理启动项、快捷方式和安装目录残留：\n\n" + app.Name + "\n" + app.InstallLocation + "\n\n是否继续？",
-                "确认清理卸载残留", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-
             SetBusy(true);
             operationCancellation = new CancellationTokenSource();
             try
             {
+                status.Text = "正在扫描卸载残留：" + app.Name;
+                UninstallResidualScan scan = await service.ScanResidualsAsync(app, operationCancellation.Token);
+                if (scan.Count == 0)
+                {
+                    status.Text = "未检测到该应用的可清理残留。";
+                    MessageBox.Show(status.Text, "卸载残留", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                if (MessageBox.Show("检测到以下残留：\n\n" + scan.Summary() +
+                    "\n\n将先导出仍存在的卸载注册表项，再清理上述内容。是否继续？",
+                    "确认清理卸载残留", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
                 ProcessResult result = await service.CleanResidualsAsync(app, true, operationCancellation.Token);
                 status.Text = result.Success ? "卸载残留清理完成。" : "部分残留清理失败。";
                 MessageBox.Show((result.Output + Environment.NewLine + result.Error).Trim(), status.Text,

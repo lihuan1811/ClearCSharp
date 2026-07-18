@@ -30,10 +30,31 @@ namespace ZyperWin__
         public string UninstallCommand { get; set; }
         public string QuietUninstallCommand { get; set; }
         public InstalledAppKind Kind { get; set; }
+        public RegistryView RegistryView { get; set; }
 
         public string SizeText
         {
             get { return EstimatedBytes > 0 ? DisplayFormat.Bytes(EstimatedBytes) : "--"; }
+        }
+    }
+
+    public sealed class UninstallResidualScan
+    {
+        public InstalledApp App { get; set; }
+        public bool RegistryEntryExists { get; set; }
+        public bool InstallDirectoryExists { get; set; }
+        public List<string> StartupEntries { get; set; } = new List<string>();
+        public List<string> Shortcuts { get; set; } = new List<string>();
+
+        public int Count
+        {
+            get { return (RegistryEntryExists ? 1 : 0) + (InstallDirectoryExists ? 1 : 0) + StartupEntries.Count + Shortcuts.Count; }
+        }
+
+        public string Summary()
+        {
+            return string.Format("{0}：注册表 {1}，安装目录 {2}，启动项 {3}，快捷方式 {4}",
+                App.Name, RegistryEntryExists ? 1 : 0, InstallDirectoryExists ? 1 : 0, StartupEntries.Count, Shortcuts.Count);
         }
     }
 
@@ -88,21 +109,31 @@ namespace ZyperWin__
                 : Task.Run<IList<InstalledApp>>(() => LoadDesktopApps(cancellationToken), cancellationToken);
         }
 
-        public Task<ProcessResult> UninstallAsync(InstalledApp app, CancellationToken cancellationToken)
+        public async Task<ProcessResult> UninstallAsync(InstalledApp app, CancellationToken cancellationToken)
         {
             if (app.Kind == InstalledAppKind.Store)
             {
                 string script = "Remove-AppxPackage -Package '" +
                     CommandLineTools.EscapePowerShellLiteral(app.Id) + "' -ErrorAction Stop";
-                return ProcessRunner.RunPowerShellAsync(script, 180000, cancellationToken);
+                return await ProcessRunner.RunPowerShellAsync(script, 180000, cancellationToken);
             }
 
-            return Task.Run(() => LaunchDesktopUninstaller(app), cancellationToken);
+            ProcessResult backup = await Task.Run(() => BackupUninstallRegistry(app, cancellationToken), cancellationToken);
+            if (!backup.Success) return backup;
+            ProcessResult uninstall = await Task.Run(() => LaunchDesktopUninstaller(app), cancellationToken);
+            if (!string.IsNullOrWhiteSpace(backup.Output))
+                uninstall.Output = (backup.Output + Environment.NewLine + uninstall.Output).Trim();
+            return uninstall;
         }
 
         public Task<ProcessResult> CleanResidualsAsync(InstalledApp app, bool removeInstallDirectory, CancellationToken cancellationToken)
         {
             return Task.Run(() => CleanResiduals(app, removeInstallDirectory, cancellationToken), cancellationToken);
+        }
+
+        public Task<UninstallResidualScan> ScanResidualsAsync(InstalledApp app, CancellationToken cancellationToken)
+        {
+            return Task.Run(() => ScanResiduals(app, cancellationToken), cancellationToken);
         }
 
         private static IList<InstalledApp> LoadDesktopApps(CancellationToken cancellationToken)
@@ -164,7 +195,8 @@ namespace ZyperWin__
                                         EstimatedBytes = estimatedBytes,
                                         UninstallCommand = uninstall,
                                         QuietUninstallCommand = Convert.ToString(key.GetValue("QuietUninstallString")),
-                                        Kind = InstalledAppKind.Desktop
+                                        Kind = InstalledAppKind.Desktop,
+                                        RegistryView = view
                                     };
                                 }
                             }
@@ -260,6 +292,52 @@ namespace ZyperWin__
             }
         }
 
+        private static ProcessResult BackupUninstallRegistry(InstalledApp app, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(app.RegistryPath))
+                return new ProcessResult { ExitCode = 0, Output = "没有需要备份的卸载注册表项。", Error = string.Empty };
+            ProcessResult query = ProcessRunner.Run("reg.exe", "query \"" + app.RegistryPath + "\" " + RegViewArgument(app), 30000, cancellationToken);
+            if (!query.Success)
+                return new ProcessResult { ExitCode = 0, Output = "卸载注册表项已不存在。", Error = string.Empty };
+            try
+            {
+                string backupDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "CDiskGlow", "registry_backups");
+                Directory.CreateDirectory(backupDirectory);
+                string safeName = string.Concat((app.Name ?? "app").Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+                string backup = Path.Combine(backupDirectory, safeName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ".reg");
+                ProcessResult export = ProcessRunner.Run("reg.exe", "export \"" + app.RegistryPath + "\" \"" + backup + "\" /y " + RegViewArgument(app), 60000, cancellationToken);
+                if (!export.Success)
+                    return new ProcessResult { ExitCode = 1, Error = "卸载前注册表备份失败，已停止卸载：" + ResultMessage(export), Output = string.Empty };
+                OperationLogger.Info("软件卸载", "卸载前注册表备份：" + backup);
+                return new ProcessResult { ExitCode = 0, Output = "卸载前注册表备份：" + backup, Error = string.Empty };
+            }
+            catch (Exception ex)
+            {
+                return new ProcessResult { ExitCode = 1, Error = "卸载前注册表备份失败，已停止卸载：" + ex.Message, Output = string.Empty };
+            }
+        }
+
+        private static UninstallResidualScan ScanResiduals(InstalledApp app, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var scan = new UninstallResidualScan { App = app };
+            if (!string.IsNullOrWhiteSpace(app.RegistryPath))
+            {
+                ProcessResult query = ProcessRunner.Run("reg.exe", "query \"" + app.RegistryPath + "\" " + RegViewArgument(app), 30000, cancellationToken);
+                scan.RegistryEntryExists = query.Success;
+            }
+            scan.InstallDirectoryExists = IsSafeInstallLocation(app.InstallLocation);
+            ScanStartupResiduals(app, Registry.CurrentUser, "当前用户", scan.StartupEntries);
+            ScanStartupResiduals(app, Registry.LocalMachine, "所有用户", scan.StartupEntries);
+            ScanShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), scan.Shortcuts);
+            ScanShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory), scan.Shortcuts);
+            ScanShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.StartMenu), scan.Shortcuts);
+            ScanShortcuts(app, Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu), scan.Shortcuts);
+            OperationLogger.Info("卸载残留扫描", scan.Summary());
+            return scan;
+        }
+
         private static ProcessResult CleanResiduals(InstalledApp app, bool removeInstallDirectory, CancellationToken cancellationToken)
         {
             var messages = new List<string>();
@@ -270,7 +348,7 @@ namespace ZyperWin__
             {
                 try
                 {
-                    ProcessResult query = ProcessRunner.Run("reg.exe", "query \"" + app.RegistryPath + "\"", 30000, cancellationToken);
+                    ProcessResult query = ProcessRunner.Run("reg.exe", "query \"" + app.RegistryPath + "\" " + RegViewArgument(app), 30000, cancellationToken);
                     if (!query.Success) messages.Add("卸载注册表项已不存在。");
                     else
                     {
@@ -281,14 +359,14 @@ namespace ZyperWin__
                         Directory.CreateDirectory(backupDirectory);
                         string safeName = string.Concat(app.Name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
                         string backup = Path.Combine(backupDirectory, safeName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".reg");
-                        ProcessResult export = ProcessRunner.Run("reg.exe", "export \"" + app.RegistryPath + "\" \"" + backup + "\" /y", 60000, cancellationToken);
-                        if (!export.Success) errors.Add("注册表备份失败：" + export.Error);
+                        ProcessResult export = ProcessRunner.Run("reg.exe", "export \"" + app.RegistryPath + "\" \"" + backup + "\" /y " + RegViewArgument(app), 60000, cancellationToken);
+                        if (!export.Success) errors.Add("注册表备份失败：" + ResultMessage(export));
                         else
                         {
                             messages.Add("已备份卸载注册表：" + backup);
-                            ProcessResult remove = ProcessRunner.Run("reg.exe", "delete \"" + app.RegistryPath + "\" /f", 60000, cancellationToken);
+                            ProcessResult remove = ProcessRunner.Run("reg.exe", "delete \"" + app.RegistryPath + "\" /f " + RegViewArgument(app), 60000, cancellationToken);
                             if (remove.Success) messages.Add("已删除卸载注册表残留。");
-                            else errors.Add("删除卸载注册表残留失败：" + remove.Error);
+                            else errors.Add("删除卸载注册表残留失败：" + ResultMessage(remove));
                         }
                     }
                 }
@@ -351,6 +429,23 @@ namespace ZyperWin__
             }
         }
 
+        private static void ScanStartupResiduals(InstalledApp app, RegistryKey hive, string scope, IList<string> entries)
+        {
+            try
+            {
+                using (RegistryKey run = hive.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", false))
+                {
+                    if (run == null) return;
+                    foreach (string valueName in run.GetValueNames())
+                    {
+                        string value = Convert.ToString(run.GetValue(valueName));
+                        if (MatchesApplication(app, valueName + " " + value)) entries.Add(scope + "启动项：" + valueName);
+                    }
+                }
+            }
+            catch { }
+        }
+
         private static void RemoveShortcuts(InstalledApp app, string root, IList<string> messages, IList<string> errors)
         {
             if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return;
@@ -367,6 +462,27 @@ namespace ZyperWin__
             {
                 errors.Add("清理快捷方式失败：" + ex.Message);
             }
+        }
+
+        private static void ScanShortcuts(InstalledApp app, string root, IList<string> shortcuts)
+        {
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return;
+            try
+            {
+                foreach (string shortcut in Directory.GetFiles(root, "*.lnk", SearchOption.AllDirectories))
+                    if (MatchesApplication(app, Path.GetFileNameWithoutExtension(shortcut))) shortcuts.Add(shortcut);
+            }
+            catch { }
+        }
+
+        internal static string RegViewArgument(InstalledApp app)
+        {
+            return app.RegistryView == RegistryView.Registry32 ? "/reg:32" : "/reg:64";
+        }
+
+        private static string ResultMessage(ProcessResult result)
+        {
+            return string.IsNullOrWhiteSpace(result.Error) ? result.Output : result.Error;
         }
 
         private static bool MatchesApplication(InstalledApp app, string value)

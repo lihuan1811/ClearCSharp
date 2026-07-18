@@ -133,10 +133,10 @@ namespace ZyperWin__
                 foreach (MigrationFolder folder in folders)
                 {
                     int index = grid.Rows.Add(false, folder.Name, DisplayFormat.Bytes(folder.Size),
-                        folder.Migrated ? "已迁移" : (folder.Exists ? "未迁移" : "不存在"),
+                        folder.Migrated ? "已迁移" : (folder.Partial ? "部分迁移" : (folder.Exists ? "未迁移" : "不存在")),
                         folder.SourcePath, folder.TargetPath);
                     grid.Rows[index].Tag = folder;
-                    if (folder.Migrated) grid.Rows[index].DefaultCellStyle.BackColor = AppPalette.PaleGreen;
+                    if (folder.Migrated || folder.Partial) grid.Rows[index].DefaultCellStyle.BackColor = AppPalette.PaleGreen;
                 }
                 status.Text = "迁移状态已刷新；仅显示最终需求中的 7 个系统目录。";
             }
@@ -163,7 +163,9 @@ namespace ZyperWin__
             foreach (DataGridViewRow row in grid.Rows)
             {
                 var folder = row.Tag as MigrationFolder;
-                if (folder == null || folder.Migrated != migrated) continue;
+                if (folder == null) continue;
+                bool canSelect = migrated ? (folder.Migrated || folder.Partial) : (!folder.Migrated && !folder.Partial);
+                if (!canSelect) continue;
                 if (Convert.ToBoolean(row.Cells["Selected"].Value ?? false)) selected.Add(folder);
             }
             return selected;

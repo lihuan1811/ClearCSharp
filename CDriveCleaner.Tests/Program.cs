@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -19,10 +20,12 @@ namespace CDriveCleaner.Tests
             Run("Uninstall command parsing", TestCommandParsing);
             Run("Cleanup catalog safety", TestCleanupCatalog);
             Run("Cleanup wildcard paths", TestCleanupWildcardPaths);
+            Run("Cleanup per-file selection", TestCleanupFileSelection);
             Run("Final navigation contract", TestFinalNavigation);
             Run("Disk analysis", TestDiskAnalysis);
             Run("Managed file classification", TestManagedFiles);
             Run("Migration catalog contract", TestMigrationCatalog);
+            Run("GPU safe operation parsing", TestGpuSafetyParsing);
             Run("Zyper optimization data", TestOptimizationData);
 
             Console.WriteLine(failures == 0
@@ -138,6 +141,33 @@ namespace CDriveCleaner.Tests
             Assert(MainWindow.FinalModules.SequenceEqual(expected), "main navigation no longer matches the final five modules");
         }
 
+        private static void TestCleanupFileSelection()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "CDiskGlowSelection_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string selectedPath = Path.Combine(root, "selected.tmp");
+            string skippedPath = Path.Combine(root, "skipped.tmp");
+            try
+            {
+                File.WriteAllBytes(selectedPath, new byte[32]);
+                File.WriteAllBytes(skippedPath, new byte[64]);
+                var scan = new CleanupScanResult
+                {
+                    Rule = new CleanupRule { Name = "test", ScanOnly = false },
+                    Files = new List<string> { selectedPath, skippedPath },
+                    SelectedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { selectedPath },
+                    Roots = new List<string> { root },
+                    FileCount = 2,
+                    Bytes = 96
+                };
+                CleanupScanResult selection = CleanupService.CreateSelection(scan);
+                Assert(selection.FileCount == 1 && selection.Files.Single() == selectedPath,
+                    "cleanup must preserve the individual file selection");
+                Assert(selection.Bytes == 32, "selected cleanup bytes must be recalculated from selected files");
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
         private static void TestManagedFiles()
         {
             Assert(ManagedFileService.DetectType("movie.mp4") == ManagedFileType.Video, "video classification failed");
@@ -175,6 +205,34 @@ namespace CDriveCleaner.Tests
                 "desktop migration must use the real User Shell Folders path");
             Assert(folders.Single(folder => folder.Key == "downloads").SourcePath == KnownFolderPaths.Downloads,
                 "downloads migration must use the real User Shell Folders path");
+            MigrationFolder appData = folders.Single(folder => folder.Key == "appdata_cache");
+            Assert(appData.Locations.Count == 5, "AppData migration must include all five WeChat/QQ locations");
+            Assert(appData.Locations.Any(location => location.Key == "local-tencent"), "Local Tencent migration location is missing");
+            Assert(appData.Locations.Any(location => location.Key == "roaming-tencent"), "Roaming Tencent migration location is missing");
+            Assert(appData.Locations.Any(location => location.SourcePath.EndsWith("WeChat Files", StringComparison.OrdinalIgnoreCase)),
+                "WeChat Files migration location is missing");
+            Assert(appData.Locations.Any(location => location.SourcePath.EndsWith("xwechat_files", StringComparison.OrdinalIgnoreCase)),
+                "xwechat_files migration location is missing");
+            Assert(appData.Locations.Any(location => location.SourcePath.EndsWith("Tencent Files", StringComparison.OrdinalIgnoreCase)),
+                "Tencent Files migration location is missing");
+        }
+
+        private static void TestGpuSafetyParsing()
+        {
+            string guid = GpuService.ParsePowerSchemeGuid("Power Scheme GUID: 8C5E7FDA-E8BF-4A96-9A85-A6E23A8C635C  (High performance)");
+            Assert(guid == "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c", "active power scheme GUID parsing failed");
+            Assert(GpuService.ParsePowerSchemeGuid("no power scheme") == null, "invalid power scheme output must not produce a GUID");
+            Assert(GpuService.ShaderCachePaths(GpuVendor.Nvidia).Any(path => path.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) >= 0),
+                "NVIDIA shader cache catalog is missing");
+            Assert(GpuService.ShaderCachePaths(GpuVendor.Amd).Any(path => path.IndexOf("AMD", StringComparison.OrdinalIgnoreCase) >= 0),
+                "AMD shader cache catalog is missing");
+            Assert(GpuService.ShaderCachePaths(GpuVendor.Intel).Any(path => path.IndexOf("Intel", StringComparison.OrdinalIgnoreCase) >= 0),
+                "Intel shader cache catalog is missing");
+
+            Assert(UninstallService.RegViewArgument(new InstalledApp { RegistryView = Microsoft.Win32.RegistryView.Registry32 }) == "/reg:32",
+                "32-bit uninstall registry backup must preserve the registry view");
+            Assert(UninstallService.RegViewArgument(new InstalledApp { RegistryView = Microsoft.Win32.RegistryView.Registry64 }) == "/reg:64",
+                "64-bit uninstall registry backup must preserve the registry view");
         }
 
         private static void TestDiskAnalysis()

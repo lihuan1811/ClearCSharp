@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,6 +14,8 @@ namespace ZyperWin__
     {
         private readonly CleanupService service = new CleanupService();
         private readonly DataGridView grid = UiFactory.Grid();
+        private readonly DataGridView fileGrid = UiFactory.Grid();
+        private readonly SplitContainer resultsSplit = new SplitContainer();
         private readonly Label status = UiFactory.StatusLabel("请选择清理模块，然后开始扫描。");
         private readonly ProgressBar progress = new ProgressBar();
         private readonly Button scanButton = UiFactory.PrimaryButton("扫描");
@@ -23,6 +27,8 @@ namespace ZyperWin__
         private readonly Button addWhitelistButton = UiFactory.SecondaryButton("添加白名单");
         private readonly Button manageWhitelistButton = UiFactory.SecondaryButton("管理白名单");
         private CancellationTokenSource cancellation;
+        private CleanupScanResult visibleFiles;
+        private bool changingSelection;
 
         public CleanupDashboard()
         {
@@ -49,6 +55,12 @@ namespace ZyperWin__
             headerActions.Controls.Add(selectRecommendedButton);
 
             ConfigureGrid();
+            ConfigureFileGrid();
+            resultsSplit.Dock = DockStyle.Fill;
+            resultsSplit.Orientation = Orientation.Horizontal;
+            resultsSplit.SplitterDistance = 250;
+            resultsSplit.Panel1.Controls.Add(grid);
+            resultsSplit.Panel2.Controls.Add(fileGrid);
 
             var bottom = new TableLayoutPanel
             {
@@ -83,7 +95,7 @@ namespace ZyperWin__
             actions.Controls.Add(cleanButton);
             bottom.Controls.Add(actions, 1, 1);
 
-            Controls.Add(grid);
+            Controls.Add(resultsSplit);
             Controls.Add(bottom);
             Controls.Add(header);
 
@@ -95,6 +107,12 @@ namespace ZyperWin__
             refreshButton.Click += delegate { PopulateRules(); };
             addWhitelistButton.Click += AddWhitelistButton_Click;
             manageWhitelistButton.Click += delegate { using (var dialog = new CleanupWhitelistDialog()) dialog.ShowDialog(this); };
+            grid.SelectionChanged += delegate { ShowSelectedRuleFiles(); };
+            grid.CurrentCellDirtyStateChanged += delegate
+            {
+                if (grid.IsCurrentCellDirty) grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            };
+            grid.CellValueChanged += Grid_CellValueChanged;
             PopulateRules();
         }
 
@@ -161,8 +179,63 @@ namespace ZyperWin__
             });
         }
 
+        private void ConfigureFileGrid()
+        {
+            fileGrid.ReadOnly = false;
+            fileGrid.VirtualMode = true;
+            fileGrid.RowCount = 0;
+            fileGrid.Columns.Add(new DataGridViewCheckBoxColumn
+            {
+                Name = "Selected",
+                HeaderText = "清理",
+                Width = 54,
+                ReadOnly = false,
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            });
+            fileGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "文件名", Width = 190, ReadOnly = true });
+            fileGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Size", HeaderText = "大小", Width = 95, ReadOnly = true });
+            fileGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Modified", HeaderText = "修改时间", Width = 145, ReadOnly = true });
+            fileGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "Path",
+                HeaderText = "完整路径",
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                MinimumWidth = 280,
+                ReadOnly = true
+            });
+            fileGrid.CellValueNeeded += FileGrid_CellValueNeeded;
+            fileGrid.CellValuePushed += FileGrid_CellValuePushed;
+            fileGrid.CellToolTipTextNeeded += FileGrid_CellToolTipTextNeeded;
+            fileGrid.CellBeginEdit += delegate(object sender, DataGridViewCellCancelEventArgs args)
+            {
+                if (visibleFiles != null && visibleFiles.Rule.ScanOnly) args.Cancel = true;
+            };
+            fileGrid.MouseDown += delegate(object sender, MouseEventArgs args)
+            {
+                if (args.Button != MouseButtons.Right) return;
+                DataGridView.HitTestInfo hit = fileGrid.HitTest(args.X, args.Y);
+                if (hit.RowIndex >= 0 && hit.ColumnIndex >= 0) fileGrid.CurrentCell = fileGrid.Rows[hit.RowIndex].Cells[hit.ColumnIndex];
+            };
+            fileGrid.CurrentCellDirtyStateChanged += delegate
+            {
+                if (fileGrid.IsCurrentCellDirty) fileGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            };
+
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("打开文件位置", null, delegate { OpenCurrentFileLocation(); });
+            menu.Items.Add("复制完整路径", null, delegate { CopyCurrentFilePath(); });
+            menu.Items.Add("查看底层操作", null, delegate { ShowCurrentFileOperation(); });
+            menu.Items.Add("单独清理此文件", null, async delegate { await CleanCurrentFileAsync(); });
+            menu.Items.Add("添加到白名单", null, delegate { AddCurrentFileToWhitelist(); });
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("查看操作日志", null, delegate { OpenOperationLog(); });
+            fileGrid.ContextMenuStrip = menu;
+        }
+
         private void PopulateRules()
         {
+            visibleFiles = null;
+            fileGrid.RowCount = 0;
             grid.Rows.Clear();
             foreach (CleanupRule rule in CleanupCatalog.GetRules(CleanupKind.DriveC))
             {
@@ -219,6 +292,13 @@ namespace ZyperWin__
                         grid.Rows[index].DefaultCellStyle.ForeColor = AppPalette.Muted;
                     }
                 }
+                if (grid.Rows.Count > 0)
+                {
+                    grid.ClearSelection();
+                    grid.Rows[0].Selected = true;
+                    grid.CurrentCell = grid.Rows[0].Cells["Name"];
+                    ShowSelectedRuleFiles();
+                }
                 long detected = results.Sum(value => value.Bytes);
                 long cleanable = results.Where(value => !value.Rule.ScanOnly).Sum(value => value.Bytes);
                 int files = results.Sum(value => value.FileCount);
@@ -252,7 +332,8 @@ namespace ZyperWin__
             {
                 bool isSelected = Convert.ToBoolean(row.Cells["Selected"].Value ?? false);
                 var result = row.Tag as CleanupScanResult;
-                if (isSelected && result != null && result.FileCount > 0) selected.Add(result);
+                if (isSelected && result != null && result.SelectedFiles.Count > 0)
+                    selected.Add(CleanupService.CreateSelection(result));
             }
             if (selected.Count == 0)
             {
@@ -262,8 +343,13 @@ namespace ZyperWin__
 
             long bytes = selected.Sum(value => value.Bytes);
             int files = selected.Sum(value => value.FileCount);
+            string backupRoot;
+            bool createBackup = BackupStore.TryGetSpaceReleasingRoot(out backupRoot);
+            string backupNotice = createBackup
+                ? "删除前会备份到：" + backupRoot
+                : "未检测到 C 盘以外的可用磁盘。为了真实释放 C 盘空间，本次不会创建备份，删除后无法从本程序还原。";
             DialogResult answer = MessageBox.Show(
-                string.Format("将删除 {0:N0} 个已扫描文件，预计释放 {1}。\n\n默认会先写入清理备份；仅分析项不会删除。是否继续？", files, DisplayFormat.Bytes(bytes)),
+                string.Format("将删除 {0:N0} 个已扫描文件，预计释放 {1}。\n\n{2}\n仅分析项不会删除。是否继续？", files, DisplayFormat.Bytes(bytes), backupNotice),
                 "确认清理",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
@@ -276,6 +362,7 @@ namespace ZyperWin__
             {
                 CleanupResult result = await service.CleanAsync(
                     selected,
+                    createBackup ? backupRoot : null,
                     new Progress<string>(value => status.Text = value),
                     cancellation.Token);
                 status.Text = string.Format(
@@ -323,7 +410,8 @@ namespace ZyperWin__
                     CleanupScanResult result = row.Tag as CleanupScanResult;
                     rule = result == null ? null : result.Rule;
                 }
-                row.Cells["Selected"].Value = rule != null && rule.Recommended;
+                bool select = rule != null && rule.Recommended && !rule.ScanOnly;
+                SetRuleSelection(row, select);
             }
         }
 
@@ -342,7 +430,7 @@ namespace ZyperWin__
                     CleanupScanResult result = row.Tag as CleanupScanResult;
                     rule = result?.Rule;
                 }
-                row.Cells["Selected"].Value = rule != null && !rule.ScanOnly;
+                SetRuleSelection(row, rule != null && !rule.ScanOnly);
             }
         }
 
@@ -357,6 +445,7 @@ namespace ZyperWin__
             addWhitelistButton.Enabled = !busy;
             manageWhitelistButton.Enabled = !busy;
             grid.Enabled = !busy;
+            fileGrid.Enabled = !busy;
         }
 
         private void AddWhitelistButton_Click(object sender, EventArgs e)
@@ -386,8 +475,185 @@ namespace ZyperWin__
         {
             foreach (DataGridViewRow row in grid.Rows)
             {
-                row.Cells["Selected"].Value = false;
+                SetRuleSelection(row, false);
             }
+            fileGrid.Invalidate();
+        }
+
+        private void Grid_CellValueChanged(object sender, DataGridViewCellEventArgs e)
+        {
+            if (changingSelection || e.RowIndex < 0 || grid.Columns[e.ColumnIndex].Name != "Selected") return;
+            DataGridViewRow row = grid.Rows[e.RowIndex];
+            var result = row.Tag as CleanupScanResult;
+            if (result == null || result.Rule.ScanOnly) return;
+            bool selected = Convert.ToBoolean(row.Cells["Selected"].Value ?? false);
+            if (selected) result.SelectedFiles.UnionWith(result.Files);
+            else result.SelectedFiles.Clear();
+            if (ReferenceEquals(result, visibleFiles)) fileGrid.Invalidate();
+        }
+
+        private void SetRuleSelection(DataGridViewRow row, bool selected)
+        {
+            var result = row.Tag as CleanupScanResult;
+            changingSelection = true;
+            row.Cells["Selected"].Value = selected;
+            changingSelection = false;
+            if (result == null) return;
+            if (selected) result.SelectedFiles.UnionWith(result.Files);
+            else result.SelectedFiles.Clear();
+        }
+
+        private void ShowSelectedRuleFiles()
+        {
+            visibleFiles = grid.CurrentRow == null ? null : grid.CurrentRow.Tag as CleanupScanResult;
+            fileGrid.RowCount = visibleFiles == null ? 0 : visibleFiles.Files.Count;
+            fileGrid.Invalidate();
+        }
+
+        private void FileGrid_CellValueNeeded(object sender, DataGridViewCellValueEventArgs e)
+        {
+            string path = FileAt(e.RowIndex);
+            if (path == null) return;
+            string column = fileGrid.Columns[e.ColumnIndex].Name;
+            if (column == "Selected") e.Value = visibleFiles.SelectedFiles.Contains(path);
+            else if (column == "Name") e.Value = Path.GetFileName(path);
+            else if (column == "Path") e.Value = path;
+            else
+            {
+                try
+                {
+                    var info = new FileInfo(path);
+                    if (column == "Size") e.Value = DisplayFormat.Bytes(info.Length);
+                    else if (column == "Modified") e.Value = info.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+                }
+                catch { e.Value = "--"; }
+            }
+        }
+
+        private void FileGrid_CellValuePushed(object sender, DataGridViewCellValueEventArgs e)
+        {
+            if (visibleFiles == null || fileGrid.Columns[e.ColumnIndex].Name != "Selected") return;
+            string path = FileAt(e.RowIndex);
+            if (path == null) return;
+            if (Convert.ToBoolean(e.Value)) visibleFiles.SelectedFiles.Add(path);
+            else visibleFiles.SelectedFiles.Remove(path);
+            DataGridViewRow ruleRow = grid.Rows.Cast<DataGridViewRow>().FirstOrDefault(row => ReferenceEquals(row.Tag, visibleFiles));
+            if (ruleRow != null)
+            {
+                changingSelection = true;
+                ruleRow.Cells["Selected"].Value = visibleFiles.SelectedFiles.Count > 0;
+                changingSelection = false;
+            }
+            status.Text = string.Format("{0}：已选择 {1:N0}/{2:N0} 个文件。", visibleFiles.Rule.Name, visibleFiles.SelectedFiles.Count, visibleFiles.FileCount);
+        }
+
+        private void FileGrid_CellToolTipTextNeeded(object sender, DataGridViewCellToolTipTextNeededEventArgs e)
+        {
+            string path = FileAt(e.RowIndex);
+            if (path != null && visibleFiles != null)
+                e.ToolTipText = visibleFiles.Rule.Risk + " | " + visibleFiles.Rule.Description + Environment.NewLine + path;
+        }
+
+        private string FileAt(int rowIndex)
+        {
+            return visibleFiles != null && rowIndex >= 0 && rowIndex < visibleFiles.Files.Count
+                ? visibleFiles.Files[rowIndex]
+                : null;
+        }
+
+        private string CurrentFilePath()
+        {
+            return fileGrid.CurrentCell == null ? null : FileAt(fileGrid.CurrentCell.RowIndex);
+        }
+
+        private void OpenCurrentFileLocation()
+        {
+            string path = CurrentFilePath();
+            if (path == null) return;
+            Process.Start(new ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"") { UseShellExecute = true });
+        }
+
+        private void CopyCurrentFilePath()
+        {
+            string path = CurrentFilePath();
+            if (path != null) Clipboard.SetText(path);
+        }
+
+        private void ShowCurrentFileOperation()
+        {
+            string path = CurrentFilePath();
+            if (path == null || visibleFiles == null) return;
+            MessageBox.Show("规则：" + visibleFiles.Rule.Name + "\n风险：" + visibleFiles.Rule.Risk +
+                "\n操作：可用其它磁盘时先复制备份，然后调用 File.Delete；最后仅删除空目录。\n\n" + path,
+                "底层操作", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private async Task CleanCurrentFileAsync()
+        {
+            string path = CurrentFilePath();
+            if (path == null || visibleFiles == null || visibleFiles.Rule.ScanOnly) return;
+            string backupRoot;
+            bool createBackup = BackupStore.TryGetSpaceReleasingRoot(out backupRoot);
+            string notice = createBackup ? "备份位置：" + backupRoot : "没有其它可用磁盘，本次不会备份。";
+            if (MessageBox.Show("确定清理此文件？\n" + notice + "\n\n" + path, "单独清理",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            long oneBytes = 0;
+            try { if (File.Exists(path)) oneBytes = new FileInfo(path).Length; } catch { }
+            var one = new CleanupScanResult
+            {
+                Rule = visibleFiles.Rule,
+                Files = new List<string> { path },
+                SelectedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { path },
+                Roots = new List<string>(),
+                FileCount = 1,
+                Bytes = oneBytes
+            };
+            cancellation = new CancellationTokenSource();
+            SetBusy(true, "取消清理");
+            try
+            {
+                CleanupResult result = await service.CleanAsync(new[] { one }, createBackup ? backupRoot : null, null, cancellation.Token);
+                if (result.DeletedFiles == 1)
+                {
+                    visibleFiles.Files.Remove(path);
+                    visibleFiles.SelectedFiles.Remove(path);
+                    visibleFiles.FileCount--;
+                    visibleFiles.Bytes -= one.Bytes;
+                    fileGrid.RowCount = visibleFiles.Files.Count;
+                    fileGrid.Invalidate();
+                    status.Text = "已清理：" + path;
+                }
+                else MessageBox.Show("文件未能删除，请查看操作日志。", "单独清理", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (OperationCanceledException) { status.Text = "单文件清理已取消。"; }
+            catch (Exception ex)
+            {
+                OperationLogger.Error("单文件清理", ex.Message);
+                MessageBox.Show(ex.Message, "单文件清理失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                cancellation.Dispose();
+                cancellation = null;
+                SetBusy(false, "扫描");
+            }
+        }
+
+        private void AddCurrentFileToWhitelist()
+        {
+            string path = CurrentFilePath();
+            if (path == null) return;
+            string error;
+            if (!CleanupWhitelist.Add(path, out error)) MessageBox.Show(error, "添加白名单失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            else status.Text = "已添加清理白名单：" + path;
+        }
+
+        private void OpenOperationLog()
+        {
+            string directory = Path.GetDirectoryName(OperationLogger.FilePath);
+            if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+            if (!File.Exists(OperationLogger.FilePath)) File.WriteAllText(OperationLogger.FilePath, "", System.Text.Encoding.UTF8);
+            Process.Start(new ProcessStartInfo("notepad.exe", "\"" + OperationLogger.FilePath + "\"") { UseShellExecute = true });
         }
 
         protected override void Dispose(bool disposing)

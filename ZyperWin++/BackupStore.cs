@@ -23,19 +23,8 @@ namespace ZyperWin__
         {
             get
             {
-                string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows));
-                try
-                {
-                    DriveInfo target = DriveInfo.GetDrives()
-                        .Where(drive => drive.IsReady && drive.DriveType == DriveType.Fixed)
-                        .Where(drive => !string.Equals(drive.RootDirectory.FullName, systemRoot, StringComparison.OrdinalIgnoreCase))
-                        .OrderByDescending(drive => drive.AvailableFreeSpace)
-                        .FirstOrDefault();
-                    if (target != null) return Path.Combine(target.RootDirectory.FullName, "C_DiskGlow_Backups");
-                }
-                catch
-                {
-                }
+                string externalRoot;
+                if (TryGetSpaceReleasingRoot(out externalRoot)) return externalRoot;
                 return Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "CDiskGlow",
@@ -43,14 +32,47 @@ namespace ZyperWin__
             }
         }
 
+        public static bool TryGetSpaceReleasingRoot(out string rootPath)
+        {
+            rootPath = null;
+            string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows));
+            try
+            {
+                DriveInfo target = DriveInfo.GetDrives()
+                    .Where(drive => drive.IsReady && (drive.DriveType == DriveType.Fixed || drive.DriveType == DriveType.Removable))
+                    .Where(drive => !string.Equals(drive.RootDirectory.FullName, systemRoot, StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(drive => drive.AvailableFreeSpace)
+                    .FirstOrDefault();
+                if (target == null) return false;
+                rootPath = Path.Combine(target.RootDirectory.FullName, "C_DiskGlow_Backups");
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public static bool TryBackup(string sourcePath, out string error)
         {
+            BackupRecord ignored;
+            return TryBackup(sourcePath, out ignored, out error);
+        }
+
+        public static bool TryBackup(string sourcePath, out BackupRecord record, out string error)
+        {
+            return TryBackup(sourcePath, RootPath, out record, out error);
+        }
+
+        public static bool TryBackup(string sourcePath, string rootPath, out BackupRecord record, out string error)
+        {
+            record = null;
             error = null;
             try
             {
                 var source = new FileInfo(sourcePath);
                 if (!source.Exists) return true;
-                string root = RootPath;
+                string root = Path.GetFullPath(rootPath);
                 Directory.CreateDirectory(root);
                 string key = Hash(source.FullName + "|" + DateTime.UtcNow.Ticks);
                 string folder = Path.Combine(root, key.Substring(0, 2), key);
@@ -69,6 +91,13 @@ namespace ZyperWin__
                 {
                     File.AppendAllText(Path.Combine(root, "manifest.tsv"), line + Environment.NewLine, new UTF8Encoding(false));
                 }
+                record = new BackupRecord
+                {
+                    CreatedAt = DateTime.UtcNow.ToLocalTime(),
+                    Bytes = source.Length,
+                    SourcePath = source.FullName,
+                    BackupPath = destination
+                };
                 return true;
             }
             catch (Exception ex)
@@ -80,8 +109,13 @@ namespace ZyperWin__
 
         public static IList<BackupRecord> ReadRecords()
         {
+            return ReadRecords(RootPath);
+        }
+
+        private static IList<BackupRecord> ReadRecords(string rootPath)
+        {
             var records = new List<BackupRecord>();
-            string manifest = Path.Combine(RootPath, "manifest.tsv");
+            string manifest = Path.Combine(rootPath, "manifest.tsv");
             if (!File.Exists(manifest)) return records;
             string[] lines;
             lock (Sync)
@@ -132,7 +166,12 @@ namespace ZyperWin__
 
         public static void Prune(int maximumCount, long maximumBytes)
         {
-            IList<BackupRecord> records = ReadRecords();
+            Prune(maximumCount, maximumBytes, RootPath);
+        }
+
+        public static void Prune(int maximumCount, long maximumBytes, string rootPath)
+        {
+            IList<BackupRecord> records = ReadRecords(rootPath);
             long total = records.Sum(record => record.Bytes);
             foreach (BackupRecord record in records.OrderBy(value => value.CreatedAt).ToList())
             {

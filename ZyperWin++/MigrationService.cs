@@ -10,6 +10,14 @@ using System.Threading.Tasks;
 
 namespace ZyperWin__
 {
+    public sealed class MigrationLocation
+    {
+        public string Key { get; set; }
+        public string Name { get; set; }
+        public string TargetName { get; set; }
+        public string SourcePath { get; set; }
+    }
+
     public sealed class MigrationFolder
     {
         public string Key { get; set; }
@@ -20,11 +28,14 @@ namespace ZyperWin__
         public long Size { get; set; }
         public bool Exists { get; set; }
         public bool Migrated { get; set; }
+        public bool Partial { get; set; }
+        public List<MigrationLocation> Locations { get; set; }
     }
 
     internal sealed class MigrationRecord
     {
         public string Key { get; set; }
+        public string LocationKey { get; set; }
         public string SourcePath { get; set; }
         public string TargetPath { get; set; }
         public DateTime CreatedAt { get; set; }
@@ -71,10 +82,10 @@ namespace ZyperWin__
             return Task.Run(() =>
             {
                 var combined = new FileOperationSummary();
-                foreach (MigrationRecord record in ReadRecords().ToList())
+                foreach (string key in ReadRecords().Select(record => record.Key).Distinct(StringComparer.OrdinalIgnoreCase).ToList())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    FileOperationSummary result = Restore(record.Key, cancellationToken);
+                    FileOperationSummary result = Restore(key, cancellationToken);
                     foreach (string path in result.AffectedPaths) combined.AffectedPaths.Add(path);
                     foreach (string error in result.Errors) combined.Errors.Add(error);
                 }
@@ -84,13 +95,14 @@ namespace ZyperWin__
 
         public static int MigratedRecordCount()
         {
-            return ReadRecords().Count;
+            return ReadRecords().Select(record => record.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count();
         }
 
         public static IList<MigrationFolder> Catalog()
         {
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             string local = Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? Path.Combine(home, "AppData", "Local");
+            string roaming = Environment.GetEnvironmentVariable("APPDATA") ?? Path.Combine(home, "AppData", "Roaming");
             return new List<MigrationFolder>
             {
                 Folder("desktop", "桌面", "Desktop", KnownFolderPaths.Desktop),
@@ -98,25 +110,49 @@ namespace ZyperWin__
                 Folder("downloads", "下载", "Downloads", KnownFolderPaths.Downloads),
                 Folder("pictures", "我的图片", "Pictures", KnownFolderPaths.Pictures),
                 Folder("videos", "我的视频", "Videos", KnownFolderPaths.Videos),
-                Folder("appdata_cache", "AppData 本地软件缓存（微信/QQ）", "AppData-Local-Tencent", Path.Combine(local, "Tencent")),
+                CompositeFolder("appdata_cache", "应用数据与聊天文件（微信/QQ）", "AppData-WeChat-QQ",
+                    Location("local-tencent", "Local Tencent", "Local-Tencent", Path.Combine(local, "Tencent")),
+                    Location("roaming-tencent", "Roaming Tencent", "Roaming-Tencent", Path.Combine(roaming, "Tencent")),
+                    Location("wechat-files", "WeChat Files", "Documents-WeChat-Files", Path.Combine(KnownFolderPaths.Documents, "WeChat Files")),
+                    Location("xwechat-files", "xwechat_files", "Documents-xwechat-files", Path.Combine(KnownFolderPaths.Documents, "xwechat_files")),
+                    Location("tencent-files", "Tencent Files", "Documents-Tencent-Files", Path.Combine(KnownFolderPaths.Documents, "Tencent Files"))),
                 Folder("temp", "当前用户 Temp 临时文件夹", "User-Temp", Path.Combine(local, "Temp"))
             };
         }
 
         private static IList<MigrationFolder> Scan(CancellationToken cancellationToken)
         {
-            IDictionary<string, MigrationRecord> records = ReadRecords().ToDictionary(record => record.Key, StringComparer.OrdinalIgnoreCase);
+            IList<MigrationRecord> records = ReadRecords();
             IList<MigrationFolder> folders = Catalog();
             foreach (MigrationFolder folder in folders)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                MigrationRecord record;
-                records.TryGetValue(folder.Key, out record);
-                folder.Exists = Directory.Exists(folder.SourcePath);
-                folder.Migrated = record != null && IsReparsePoint(folder.SourcePath) && Directory.Exists(record.TargetPath);
-                folder.TargetPath = folder.Migrated ? record.TargetPath : string.Empty;
-                string measuredPath = folder.Migrated ? folder.TargetPath : folder.SourcePath;
-                folder.Size = Directory.Exists(measuredPath) ? DirectorySize(measuredPath, cancellationToken) : 0;
+                IList<MigrationRecord> folderRecords = records.Where(record => string.Equals(record.Key, folder.Key, StringComparison.OrdinalIgnoreCase)).ToList();
+                IList<MigrationLocation> locations = EligibleLocations(folder, true).ToList();
+                folder.Exists = locations.Any(location => Directory.Exists(location.SourcePath));
+                int applicable = 0;
+                int migrated = 0;
+                long size = 0;
+                var targets = new List<string>();
+                foreach (MigrationLocation location in locations)
+                {
+                    MigrationRecord record = FindRecord(folderRecords, location);
+                    bool exists = Directory.Exists(location.SourcePath);
+                    if (!exists && record == null) continue;
+                    applicable++;
+                    bool isMigrated = record != null && IsReparsePoint(record.SourcePath) && Directory.Exists(record.TargetPath);
+                    if (isMigrated)
+                    {
+                        migrated++;
+                        targets.Add(record.TargetPath);
+                    }
+                    string measuredPath = isMigrated ? record.TargetPath : location.SourcePath;
+                    if (Directory.Exists(measuredPath)) size += DirectorySize(measuredPath, cancellationToken);
+                }
+                folder.Migrated = applicable > 0 && migrated == applicable;
+                folder.Partial = migrated > 0 && migrated < applicable;
+                folder.TargetPath = string.Join("；", targets);
+                folder.Size = size;
             }
             return folders;
         }
@@ -130,7 +166,7 @@ namespace ZyperWin__
                 result.Errors.Add("未知的系统目录：" + key);
                 return result;
             }
-            if (ReadRecords().Any(record => string.Equals(record.Key, key, StringComparison.OrdinalIgnoreCase)) || IsReparsePoint(folder.SourcePath))
+            if (ReadRecords().Any(record => string.Equals(record.Key, key, StringComparison.OrdinalIgnoreCase)))
             {
                 result.Errors.Add("该目录已经迁移：" + folder.Name);
                 return result;
@@ -138,56 +174,78 @@ namespace ZyperWin__
 
             string validationError;
             string targetRootPath;
-            if (!ValidateTarget(folder, targetRoot, out targetRootPath, out validationError))
+            IList<MigrationLocation> locations = EligibleLocations(folder, folder.Locations.Count == 1)
+                .Where(location => folder.Locations.Count == 1 || Directory.Exists(location.SourcePath))
+                .ToList();
+            if (locations.Count == 0)
+            {
+                result.Errors.Add("没有找到位于 C 盘且可迁移的目录：" + folder.Name);
+                return result;
+            }
+            if (!ValidateTargetRoot(targetRoot, out targetRootPath, out validationError))
             {
                 result.Errors.Add(validationError);
                 return result;
             }
-            string target = Path.Combine(targetRootPath, folder.TargetName);
-            bool sourceExisted = Directory.Exists(folder.SourcePath);
-            bool junctionCreated = false;
-            try
+            var pending = new List<MigrationRecord>();
+            foreach (MigrationLocation location in locations)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                EnsureFreeSpace(folder.SourcePath, target, "迁移目标磁盘", cancellationToken);
-                Directory.CreateDirectory(target);
-                if (sourceExisted)
+                string target = TargetPath(folder, location, targetRootPath);
+                if (!ValidateLocationTarget(location, target, out validationError))
                 {
-                    MoveDirectoryContents(folder.SourcePath, target, cancellationToken);
-                    Directory.Delete(folder.SourcePath, false);
+                    result.Errors.Add(validationError);
+                    return result;
                 }
-                else Directory.CreateDirectory(Path.GetDirectoryName(folder.SourcePath));
-
-                FileOperationSummary junction = CreateJunction(folder.SourcePath, target, cancellationToken);
-                if (!junction.Success) throw new IOException(string.Join(Environment.NewLine, junction.Errors));
-                junctionCreated = true;
-                if (!UpdateRedirect(folder, target, out validationError)) throw new IOException(validationError);
-
-                AddRecord(new MigrationRecord
+                pending.Add(new MigrationRecord
                 {
                     Key = folder.Key,
-                    SourcePath = folder.SourcePath,
+                    LocationKey = location.Key,
+                    SourcePath = location.SourcePath,
                     TargetPath = target,
                     CreatedAt = DateTime.UtcNow
                 });
-                result.AffectedPaths.Add(folder.SourcePath);
-                result.AffectedPaths.Add(target);
-                OperationLogger.Info("系统目录迁移", folder.Name + " -> " + target);
+            }
+            EnsureCombinedFreeSpace(pending.Select(record => record.SourcePath), targetRootPath, "迁移目标磁盘", cancellationToken);
+
+            try
+            {
+                foreach (MigrationRecord record in pending)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    Directory.CreateDirectory(record.TargetPath);
+                    if (Directory.Exists(record.SourcePath))
+                    {
+                        if (IsReparsePoint(record.SourcePath)) throw new IOException("原路径已经是目录连接：" + record.SourcePath);
+                        MoveDirectoryContents(record.SourcePath, record.TargetPath, cancellationToken);
+                        Directory.Delete(record.SourcePath, false);
+                    }
+                    else Directory.CreateDirectory(Path.GetDirectoryName(record.SourcePath));
+
+                    FileOperationSummary junction = CreateJunction(record.SourcePath, record.TargetPath, cancellationToken);
+                    if (!junction.Success) throw new IOException(string.Join(Environment.NewLine, junction.Errors));
+                }
+
+                if (folder.Locations.Count == 1 && !UpdateRedirect(folder, pending[0].TargetPath, out validationError))
+                    throw new IOException(validationError);
+
+                IList<MigrationRecord> records = ReadRecords();
+                foreach (MigrationRecord record in pending)
+                {
+                    records.Add(record);
+                    result.AffectedPaths.Add(record.SourcePath);
+                    result.AffectedPaths.Add(record.TargetPath);
+                    OperationLogger.Info("系统目录迁移", folder.Name + " / " + record.LocationKey + " -> " + record.TargetPath);
+                }
+                WriteRecords(records);
             }
             catch (Exception ex)
             {
-                if (junctionCreated) RemoveJunction(folder.SourcePath, CancellationToken.None);
-                try
+                foreach (MigrationRecord record in pending.AsEnumerable().Reverse())
                 {
-                    Directory.CreateDirectory(folder.SourcePath);
-                    if (Directory.Exists(target)) MoveDirectoryContents(target, folder.SourcePath, CancellationToken.None);
-                    if (Directory.Exists(target) && !Directory.EnumerateFileSystemEntries(target).Any()) Directory.Delete(target, false);
-                    UpdateRedirect(folder, folder.SourcePath, out validationError);
+                    try { RollbackMigration(record); }
+                    catch (Exception rollbackError) { result.Errors.Add("迁移失败且回滚未完整完成：" + rollbackError.Message); }
                 }
-                catch (Exception rollbackError)
-                {
-                    result.Errors.Add("迁移失败且回滚未完整完成：" + rollbackError.Message);
-                }
+                if (folder.Locations.Count == 1) UpdateRedirect(folder, pending[0].SourcePath, out validationError);
                 result.Errors.Add("迁移失败：" + ex.Message);
                 OperationLogger.Error("系统目录迁移", folder.Name + "：" + ex.Message);
             }
@@ -197,9 +255,10 @@ namespace ZyperWin__
         private static FileOperationSummary Restore(string key, CancellationToken cancellationToken)
         {
             var result = new FileOperationSummary();
-            MigrationRecord record = ReadRecords().FirstOrDefault(item => string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase));
+            IList<MigrationRecord> allRecords = ReadRecords();
+            IList<MigrationRecord> records = allRecords.Where(item => string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase)).ToList();
             MigrationFolder folder = Catalog().FirstOrDefault(item => string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase));
-            if (record == null || folder == null)
+            if (records.Count == 0 || folder == null)
             {
                 result.Errors.Add("该目录没有可还原的迁移记录。");
                 return result;
@@ -207,44 +266,58 @@ namespace ZyperWin__
 
             try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!IsReparsePoint(record.SourcePath)) throw new IOException("原路径已不是本程序创建的目录连接，已停止还原。");
-                EnsureFreeSpace(record.TargetPath, record.SourcePath, "C盘原目录", cancellationToken);
-                FileOperationSummary removed = RemoveJunction(record.SourcePath, cancellationToken);
-                if (!removed.Success) throw new IOException(string.Join(Environment.NewLine, removed.Errors));
-                Directory.CreateDirectory(record.SourcePath);
-                if (Directory.Exists(record.TargetPath)) MoveDirectoryContents(record.TargetPath, record.SourcePath, cancellationToken);
-                string updateError;
-                if (!UpdateRedirect(folder, record.SourcePath, out updateError)) throw new IOException(updateError);
-                if (Directory.Exists(record.TargetPath) && !Directory.EnumerateFileSystemEntries(record.TargetPath).Any()) Directory.Delete(record.TargetPath, false);
-                RemoveRecord(record.Key);
-                result.AffectedPaths.Add(record.SourcePath);
-                OperationLogger.Info("还原迁移目录", folder.Name + " -> " + record.SourcePath);
+                EnsureCombinedFreeSpace(records.Select(record => record.TargetPath), records[0].SourcePath, "C盘原目录", cancellationToken);
             }
             catch (Exception ex)
             {
+                result.Errors.Add("还原前检查失败：" + ex.Message);
+                return result;
+            }
+
+            var restored = new List<MigrationRecord>();
+            foreach (MigrationRecord record in records.AsEnumerable().Reverse())
+            {
                 try
                 {
-                    if (Directory.Exists(record.SourcePath) && !IsReparsePoint(record.SourcePath))
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!IsReparsePoint(record.SourcePath)) throw new IOException("原路径已不是本程序创建的目录连接：" + record.SourcePath);
+                    FileOperationSummary removed = RemoveJunction(record.SourcePath, cancellationToken);
+                    if (!removed.Success) throw new IOException(string.Join(Environment.NewLine, removed.Errors));
+                    Directory.CreateDirectory(record.SourcePath);
+                    if (Directory.Exists(record.TargetPath)) MoveDirectoryContents(record.TargetPath, record.SourcePath, cancellationToken);
+                    if (folder.Locations.Count == 1)
                     {
-                        Directory.CreateDirectory(record.TargetPath);
-                        MoveDirectoryContents(record.SourcePath, record.TargetPath, CancellationToken.None);
-                        if (!Directory.EnumerateFileSystemEntries(record.SourcePath).Any()) Directory.Delete(record.SourcePath, false);
-                        CreateJunction(record.SourcePath, record.TargetPath, CancellationToken.None);
-                        string ignored;
-                        UpdateRedirect(folder, record.TargetPath, out ignored);
+                        string updateError;
+                        if (!UpdateRedirect(folder, record.SourcePath, out updateError)) throw new IOException(updateError);
                     }
+                    if (Directory.Exists(record.TargetPath) && !Directory.EnumerateFileSystemEntries(record.TargetPath).Any())
+                        Directory.Delete(record.TargetPath, false);
+                    restored.Add(record);
+                    result.AffectedPaths.Add(record.SourcePath);
+                    OperationLogger.Info("还原迁移目录", folder.Name + " / " + record.LocationKey + " -> " + record.SourcePath);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    try
+                    {
+                        RestoreMigratedState(record);
+                        if (folder.Locations.Count == 1)
+                        {
+                            string ignored;
+                            UpdateRedirect(folder, record.TargetPath, out ignored);
+                        }
+                    }
+                    catch { }
+                    result.Errors.Add("还原失败，已尝试恢复迁移状态：" + ex.Message);
+                    OperationLogger.Error("还原迁移目录", folder.Name + "：" + ex.Message);
                 }
-                result.Errors.Add("还原失败，已尝试恢复迁移状态：" + ex.Message);
-                OperationLogger.Error("还原迁移目录", folder.Name + "：" + ex.Message);
             }
+
+            WriteRecords(allRecords.Where(record => !restored.Contains(record)).ToList());
             return result;
         }
 
-        private static bool ValidateTarget(MigrationFolder folder, string targetRoot, out string normalized, out string error)
+        private static bool ValidateTargetRoot(string targetRoot, out string normalized, out string error)
         {
             normalized = string.Empty;
             error = string.Empty;
@@ -260,15 +333,28 @@ namespace ZyperWin__
                 if (!drive.IsReady || drive.DriveType != DriveType.Fixed) throw new IOException("迁移目标必须是可用的本地固定磁盘。");
                 if (!string.Equals(drive.DriveFormat, "NTFS", StringComparison.OrdinalIgnoreCase))
                     throw new IOException("目标磁盘为 " + drive.DriveFormat + " 格式，不支持连接点。请选择 NTFS 磁盘。");
-                if (string.Equals(Path.GetPathRoot(normalized), Path.GetPathRoot(folder.SourcePath), StringComparison.OrdinalIgnoreCase))
-                    throw new IOException("迁移目标必须位于其它磁盘。");
-                string target = Path.Combine(normalized, folder.TargetName);
-                if (IsSameOrChild(target, folder.SourcePath)) throw new IOException("迁移目标不能位于原目录内部。");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        private static bool ValidateLocationTarget(MigrationLocation location, string target, out string error)
+        {
+            error = string.Empty;
+            try
+            {
+                if (string.Equals(Path.GetPathRoot(target), Path.GetPathRoot(location.SourcePath), StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("迁移目标必须位于其它磁盘：" + location.Name);
+                if (IsSameOrChild(target, location.SourcePath)) throw new IOException("迁移目标不能位于原目录内部。");
                 if (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
                     throw new IOException("迁移目标已存在内容，为避免混入旧文件和破坏回滚，未执行迁移：" + target);
                 if (File.Exists(target) || IsReparsePoint(target)) throw new IOException("迁移目标不是可用的普通目录：" + target);
                 string executable = Environment.ProcessPath;
-                if (!string.IsNullOrWhiteSpace(executable) && IsSameOrChild(executable, folder.SourcePath))
+                if (!string.IsNullOrWhiteSpace(executable) && IsSameOrChild(executable, location.SourcePath))
                     throw new IOException("本程序位于待迁移目录内，请先把程序移动到其它位置。");
                 return true;
             }
@@ -385,20 +471,20 @@ namespace ZyperWin__
             }
         }
 
-        private static void EnsureFreeSpace(string source, string destination, string destinationLabel, CancellationToken cancellationToken)
+        private static void EnsureCombinedFreeSpace(IEnumerable<string> sources, string destination, string destinationLabel, CancellationToken cancellationToken)
         {
-            if (!Directory.Exists(source)) return;
-            long required = DirectorySize(source, cancellationToken);
+            long required = 0;
+            foreach (string source in sources.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (Directory.Exists(source)) required += DirectorySize(source, cancellationToken);
+            }
             string root = Path.GetPathRoot(Path.GetFullPath(destination));
             var drive = new DriveInfo(root);
             if (!drive.IsReady) throw new IOException(destinationLabel + "不可用。");
             if (required > drive.AvailableFreeSpace)
             {
-                throw new IOException(string.Format(
-                    "{0}空间不足：需要 {1}，当前可用 {2}。",
-                    destinationLabel,
-                    DisplayFormat.Bytes(required),
-                    DisplayFormat.Bytes(drive.AvailableFreeSpace)));
+                throw new IOException(string.Format("{0}空间不足：需要 {1}，当前可用 {2}。",
+                    destinationLabel, DisplayFormat.Bytes(required), DisplayFormat.Bytes(drive.AvailableFreeSpace)));
             }
         }
 
@@ -474,7 +560,85 @@ namespace ZyperWin__
 
         private static MigrationFolder Folder(string key, string name, string targetName, string sourcePath)
         {
-            return new MigrationFolder { Key = key, Name = name, TargetName = targetName, SourcePath = sourcePath };
+            MigrationLocation location = Location("primary", name, targetName, sourcePath);
+            return new MigrationFolder
+            {
+                Key = key,
+                Name = name,
+                TargetName = targetName,
+                SourcePath = sourcePath,
+                Locations = new List<MigrationLocation> { location }
+            };
+        }
+
+        private static MigrationFolder CompositeFolder(string key, string name, string targetName, params MigrationLocation[] locations)
+        {
+            return new MigrationFolder
+            {
+                Key = key,
+                Name = name,
+                TargetName = targetName,
+                SourcePath = string.Join("；", locations.Select(location => location.SourcePath)),
+                Locations = locations.ToList()
+            };
+        }
+
+        private static MigrationLocation Location(string key, string name, string targetName, string sourcePath)
+        {
+            return new MigrationLocation { Key = key, Name = name, TargetName = targetName, SourcePath = sourcePath };
+        }
+
+        private static IEnumerable<MigrationLocation> EligibleLocations(MigrationFolder folder, bool includeMissingSingle)
+        {
+            string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows));
+            foreach (MigrationLocation location in folder.Locations ?? new List<MigrationLocation>())
+            {
+                string sourceRoot;
+                try { sourceRoot = Path.GetPathRoot(Path.GetFullPath(location.SourcePath)); }
+                catch { continue; }
+                if (!string.Equals(sourceRoot, systemRoot, StringComparison.OrdinalIgnoreCase)) continue;
+                if (includeMissingSingle || Directory.Exists(location.SourcePath) || IsReparsePoint(location.SourcePath)) yield return location;
+            }
+        }
+
+        private static string TargetPath(MigrationFolder folder, MigrationLocation location, string targetRoot)
+        {
+            return folder.Locations.Count == 1
+                ? Path.Combine(targetRoot, folder.TargetName)
+                : Path.Combine(targetRoot, folder.TargetName, location.TargetName);
+        }
+
+        private static MigrationRecord FindRecord(IEnumerable<MigrationRecord> records, MigrationLocation location)
+        {
+            return records.FirstOrDefault(record =>
+                string.Equals(record.LocationKey, location.Key, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(record.SourcePath, location.SourcePath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static void RollbackMigration(MigrationRecord record)
+        {
+            if (IsReparsePoint(record.SourcePath))
+            {
+                FileOperationSummary removed = RemoveJunction(record.SourcePath, CancellationToken.None);
+                if (!removed.Success) throw new IOException(string.Join(Environment.NewLine, removed.Errors));
+            }
+            Directory.CreateDirectory(record.SourcePath);
+            if (Directory.Exists(record.TargetPath)) MoveDirectoryContents(record.TargetPath, record.SourcePath, CancellationToken.None);
+            if (Directory.Exists(record.TargetPath) && !Directory.EnumerateFileSystemEntries(record.TargetPath).Any())
+                Directory.Delete(record.TargetPath, false);
+        }
+
+        private static void RestoreMigratedState(MigrationRecord record)
+        {
+            if (IsReparsePoint(record.SourcePath)) return;
+            Directory.CreateDirectory(record.TargetPath);
+            if (Directory.Exists(record.SourcePath))
+            {
+                MoveDirectoryContents(record.SourcePath, record.TargetPath, CancellationToken.None);
+                if (!Directory.EnumerateFileSystemEntries(record.SourcePath).Any()) Directory.Delete(record.SourcePath, false);
+            }
+            FileOperationSummary created = CreateJunction(record.SourcePath, record.TargetPath, CancellationToken.None);
+            if (!created.Success) throw new IOException(string.Join(Environment.NewLine, created.Errors));
         }
 
         private static IList<MigrationRecord> ReadRecords()
@@ -486,15 +650,16 @@ namespace ZyperWin__
                 foreach (string line in File.ReadAllLines(StatePath, Encoding.UTF8))
                 {
                     string[] fields = line.Split('\t');
-                    if (fields.Length != 4) continue;
+                    if (fields.Length != 4 && fields.Length != 5) continue;
                     try
                     {
                         records.Add(new MigrationRecord
                         {
                             Key = fields[0],
-                            SourcePath = Decode(fields[1]),
-                            TargetPath = Decode(fields[2]),
-                            CreatedAt = DateTime.Parse(fields[3]).ToUniversalTime()
+                            LocationKey = fields.Length == 5 ? fields[1] : "primary",
+                            SourcePath = Decode(fields.Length == 5 ? fields[2] : fields[1]),
+                            TargetPath = Decode(fields.Length == 5 ? fields[3] : fields[2]),
+                            CreatedAt = DateTime.Parse(fields.Length == 5 ? fields[4] : fields[3]).ToUniversalTime()
                         });
                     }
                     catch
@@ -505,25 +670,13 @@ namespace ZyperWin__
             }
         }
 
-        private static void AddRecord(MigrationRecord record)
-        {
-            IList<MigrationRecord> records = ReadRecords();
-            records = records.Where(item => !string.Equals(item.Key, record.Key, StringComparison.OrdinalIgnoreCase)).ToList();
-            records.Add(record);
-            WriteRecords(records);
-        }
-
-        private static void RemoveRecord(string key)
-        {
-            WriteRecords(ReadRecords().Where(item => !string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase)).ToList());
-        }
-
         private static void WriteRecords(IList<MigrationRecord> records)
         {
             lock (Sync)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(StatePath));
-                string[] lines = records.Select(record => string.Join("\t", record.Key, Encode(record.SourcePath), Encode(record.TargetPath), record.CreatedAt.ToString("o"))).ToArray();
+                string[] lines = records.Select(record => string.Join("\t", record.Key, record.LocationKey ?? "primary",
+                    Encode(record.SourcePath), Encode(record.TargetPath), record.CreatedAt.ToString("o"))).ToArray();
                 File.WriteAllLines(StatePath, lines, new UTF8Encoding(false));
             }
         }
