@@ -1,4 +1,4 @@
-# C DiskGlow (.NET 8 self-contained)
+# C DiskGlow (Windows 7/10/11)
 
 Windows maintenance utility rebuilt from the cloned ZyperWin++ WinForms source.
 
@@ -16,19 +16,36 @@ cancellation where the underlying Windows operation supports it.
 
 The executable requests administrator privileges through its application
 manifest. Destructive operations require confirmation and are logged. Cleanup
-deletes are backed up, system-directory migrations keep rollback records, and
-ZyperWin++ changes made by this app are journaled for global restore.
+and file deletion backups are stored on a non-system drive when one is available;
+otherwise the confirmation dialog explicitly discloses permanent deletion so a
+C-drive backup cannot cancel out reclaimed space. System-directory migrations
+use a crash-recoverable transaction journal, and ZyperWin++ changes made by this
+app are journaled for global restore.
+
+## Downloads
+
+- Windows 10/11: use the `win-x64-self-contained` or `win-x86-self-contained`
+  executable. No separate .NET installation is required.
+- Windows 7 SP1: use `C-DiskGlow-Windows7-SP1-x86-x64-setup.exe`. The setup
+  selects the correct architecture and installs the bundled, Microsoft-signed
+  .NET Framework 4.8 runtime automatically when it is missing.
+- The smaller `win7-net48` executables are intended only for Windows 7 systems
+  that already have .NET Framework 4.8.
+
+Published binaries and SHA-256 checksums are available on the
+[GitHub Releases page](https://github.com/lihuan1811/ClearCSharp/releases/latest).
 
 ## Build
 
-Build and test with the .NET 8 SDK:
+Build and test both `net8.0-windows` and `net48` with the .NET 8 SDK:
 
 ```powershell
 dotnet restore ZyperWin++.sln
 dotnet build ZyperWin++.sln -c Release --no-restore
-dotnet run --project .\CDriveCleaner.Tests\CDriveCleaner.Tests.csproj -c Release --no-build
+dotnet run --project .\CDriveCleaner.Tests\CDriveCleaner.Tests.csproj -c Release -f net8.0-windows --no-build
 ```
 
-GitHub Actions publishes separate `win-x64` and `win-x86` self-contained single
-executables. They include the .NET runtime and do not require a separate .NET
-installation on Windows 10 or Windows 11.
+GitHub Actions builds and smoke-tests `net8.0-windows` and `.NET Framework 4.8`
+for x64 and x86, validates the embedded administrator manifest, verifies the
+Microsoft signature on the bundled framework installer, and publishes all five
+executables plus `SHA256SUMS.txt`.
