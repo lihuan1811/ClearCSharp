@@ -44,6 +44,8 @@ namespace ZyperWin__
             // not part of the cloned source. Keep unsupported actions out of the UI.
             button9.Visible = false;
             button10.Visible = false;
+            CollapseActionColumn(4);
+            CollapseActionColumn(5);
 
             // 加载XML文件
             try
@@ -79,6 +81,13 @@ namespace ZyperWin__
                 statusCancellation.Dispose();
                 statusCancellation = null;
             };
+        }
+
+        private void CollapseActionColumn(int columnIndex)
+        {
+            if (columnIndex < 0 || columnIndex >= tableLayoutPanel2.ColumnStyles.Count) return;
+            tableLayoutPanel2.ColumnStyles[columnIndex].SizeType = SizeType.Absolute;
+            tableLayoutPanel2.ColumnStyles[columnIndex].Width = 0F;
         }
 
         protected override async void OnLoad(EventArgs e)

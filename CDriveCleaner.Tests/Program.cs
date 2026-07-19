@@ -27,6 +27,7 @@ namespace CDriveCleaner.Tests
             Run("Busy animation lifecycle", TestBusyAnimationLifecycle);
             Run("Final navigation contract", TestFinalNavigation);
             Run("Main shell content layout", TestMainWindowLayout);
+            Run("Dashboard visual layout contract", TestDashboardVisualLayout);
             Run("Disk analysis", TestDiskAnalysis);
             Run("Disk analysis memory bound", TestDiskAnalysisMemoryBound);
             Run("Disk directory memory bound", TestDiskDirectoryMemoryBound);
@@ -209,6 +210,53 @@ namespace CDriveCleaner.Tests
                     content.Controls[0].Width == content.ClientSize.Width &&
                     content.Controls[0].Height == content.ClientSize.Height,
                     "default cleanup module does not fill the content host");
+            }
+        }
+
+        private static void TestDashboardVisualLayout()
+        {
+            using (var dashboard = new DiskVisualizationDashboard())
+            {
+                dashboard.Size = new System.Drawing.Size(1092, 520);
+                dashboard.CreateControl();
+                dashboard.PerformLayout();
+
+                Assert(dashboard.FileTablePanelHeightForTests >= 110,
+                    "disk table panel is too short at the shipped window size");
+                Assert(dashboard.TreemapPanelHeightForTests >= 110,
+                    "treemap is collapsed at the shipped window size");
+                Assert(dashboard.PercentBarColumnForTests.ValueType == typeof(double),
+                    "subtree percentage must use a numeric painted bar instead of font-dependent glyphs");
+                Assert(dashboard.ProgressColumnWidthForTests == 0F,
+                    "idle scan progress must not reserve a blank block");
+            }
+
+            using (var optimize = new Optimize())
+            {
+                UiFactory.ApplyTheme(optimize);
+                var actionButtons = Descendants(optimize)
+                    .Where(control => control.GetType().FullName == "AntdUI.Button" &&
+                        control.Text != "其他" && control.Text != "MSEdge")
+                    .ToArray();
+                Assert(actionButtons.Length == 8, "system optimization action buttons are missing");
+                Assert(actionButtons.All(button => button.BackColor == AppPalette.Green &&
+                    button.ForeColor == System.Drawing.Color.White),
+                    "system optimization buttons must not render as white-on-white blocks");
+
+                TableLayoutPanel actions = Descendants(optimize).OfType<TableLayoutPanel>()
+                    .Single(panel => panel.ColumnCount == 10);
+                Assert(actions.ColumnStyles[4].SizeType == SizeType.Absolute && actions.ColumnStyles[4].Width == 0F &&
+                    actions.ColumnStyles[5].SizeType == SizeType.Absolute && actions.ColumnStyles[5].Width == 0F,
+                    "hidden unsupported actions must not leave empty columns");
+            }
+        }
+
+        private static IEnumerable<Control> Descendants(Control root)
+        {
+            foreach (Control child in root.Controls)
+            {
+                yield return child;
+                foreach (Control descendant in Descendants(child)) yield return descendant;
             }
         }
 

@@ -27,7 +27,10 @@ namespace ZyperWin__
         private readonly Button upButton = UiFactory.SecondaryButton("上一级");
         private readonly BusyAnimationOverlay busyOverlay = new BusyAnimationOverlay();
         private readonly Label status = UiFactory.StatusLabel("选择目录后开始扫描，扫描过程可取消。");
-        private readonly ProgressBar progress = new ProgressBar();
+        private readonly ProgressBar progress = new ProgressBar { Visible = false };
+        private readonly ColumnStyle progressColumnStyle = new ColumnStyle(SizeType.Absolute, 0F);
+        private readonly SplitContainer gridSplit;
+        private readonly SplitContainer treemapSplit;
         private CancellationTokenSource cancellation;
         private DiskAnalysisResult analysis;
         private DiskNode currentNode;
@@ -110,36 +113,36 @@ namespace ZyperWin__
             ConfigureFileGrid();
             ConfigureExtensionGrid();
 
-            var upper = new SplitContainer
+            gridSplit = new SplitContainer
             {
                 Dock = DockStyle.Fill,
                 Orientation = Orientation.Vertical,
                 Size = new Size(1040, 280),
-                SplitterDistance = 700,
+                SplitterDistance = 680,
                 SplitterWidth = 5,
                 BackColor = AppPalette.Border,
-                Panel1MinSize = 450,
+                Panel1MinSize = 500,
                 Panel2MinSize = 220
             };
-            upper.Panel1.Controls.Add(fileGrid);
-            upper.Panel2.Controls.Add(extensionGrid);
+            gridSplit.Panel1.Controls.Add(fileGrid);
+            gridSplit.Panel2.Controls.Add(extensionGrid);
 
-            var content = new SplitContainer
+            treemapSplit = new SplitContainer
             {
                 Dock = DockStyle.Fill,
                 Orientation = Orientation.Horizontal,
                 Size = new Size(1040, 510),
-                SplitterDistance = 290,
+                SplitterDistance = 170,
                 SplitterWidth = 5,
                 BackColor = AppPalette.Border,
-                Panel1MinSize = 190,
-                Panel2MinSize = 190
+                Panel1MinSize = 110,
+                Panel2MinSize = 110
             };
-            content.Panel1.Controls.Add(upper);
+            treemapSplit.Panel1.Controls.Add(gridSplit);
             treemap.Dock = DockStyle.Fill;
-            content.Panel2.Controls.Add(treemap);
+            treemapSplit.Panel2.Controls.Add(treemap);
             var contentHost = new Panel { Dock = DockStyle.Fill, BackColor = AppPalette.Canvas };
-            contentHost.Controls.Add(content);
+            contentHost.Controls.Add(treemapSplit);
             busyOverlay.AttachTo(contentHost);
 
             var bottom = new TableLayoutPanel
@@ -150,7 +153,7 @@ namespace ZyperWin__
                 Padding = new Padding(0, 5, 0, 0)
             };
             bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220F));
+            bottom.ColumnStyles.Add(progressColumnStyle);
             bottom.Controls.Add(status, 0, 0);
             progress.Dock = DockStyle.Fill;
             progress.Margin = new Padding(8, 4, 0, 4);
@@ -169,10 +172,18 @@ namespace ZyperWin__
             scanButton.Click += async delegate { await ScanAsync(); };
             upButton.Click += delegate { NavigateToParent(); };
             fileGrid.CellDoubleClick += FileGrid_CellDoubleClick;
+            fileGrid.CellPainting += FileGrid_CellPainting;
             extensionGrid.CellClick += ExtensionGrid_CellClick;
             treemap.NodeSelected += Treemap_NodeSelected;
+            gridSplit.Resize += delegate { SetSplitterRatio(gridSplit, 0.68d); };
+            treemapSplit.Resize += delegate { SetSplitterRatio(treemapSplit, 0.52d); };
             PopulateDrives();
         }
+
+        internal int FileTablePanelHeightForTests { get { return treemapSplit.Panel1.ClientSize.Height; } }
+        internal int TreemapPanelHeightForTests { get { return treemapSplit.Panel2.ClientSize.Height; } }
+        internal DataGridViewColumn PercentBarColumnForTests { get { return fileGrid.Columns["ChildPercent"]; } }
+        internal float ProgressColumnWidthForTests { get { return progressColumnStyle.Width; } }
 
         private void PopulateDrives()
         {
@@ -220,27 +231,30 @@ namespace ZyperWin__
 
         private void ConfigureFileGrid()
         {
-            fileGrid.Columns.Add(Column("Name", "名称", 280, true));
-            fileGrid.Columns.Add(Column("ChildPercent", "子树百分比", 105, false));
-            fileGrid.Columns.Add(Column("Percent", "百分比", 85, false));
-            fileGrid.Columns.Add(Column("Physical", "物理大小", 100, false));
-            fileGrid.Columns.Add(Column("Logical", "逻辑大小", 100, false));
-            fileGrid.Columns.Add(Column("Files", "文件", 80, false));
-            fileGrid.Columns.Add(Column("Modified", "上次更改", 138, false));
+            fileGrid.Columns.Add(Column("Name", "名称", 170, true));
+            var childPercent = Column("ChildPercent", "子树百分比", 92, false);
+            childPercent.ValueType = typeof(double);
+            childPercent.DefaultCellStyle.Format = "0.0'%'";
+            fileGrid.Columns.Add(childPercent);
+            fileGrid.Columns.Add(Column("Percent", "百分比", 62, false));
+            fileGrid.Columns.Add(Column("Physical", "物理大小", 82, false));
+            fileGrid.Columns.Add(Column("Logical", "逻辑大小", 82, false));
+            fileGrid.Columns.Add(Column("Files", "文件", 60, false));
+            fileGrid.Columns.Add(Column("Modified", "上次更改", 110, false));
         }
 
         private void ConfigureExtensionGrid()
         {
-            extensionGrid.Columns.Add(Column("Extension", "扩展名", 82, false));
+            extensionGrid.Columns.Add(Column("Extension", "扩展名", 68, false));
             extensionGrid.Columns.Add(new DataGridViewTextBoxColumn
             {
                 Name = "Color",
                 HeaderText = "颜色",
-                Width = 54
+                Width = 48
             });
-            extensionGrid.Columns.Add(Column("Bytes", "字节", 95, false));
-            extensionGrid.Columns.Add(Column("Percent", "% 字节", 72, false));
-            extensionGrid.Columns.Add(Column("Files", "文件", 72, false));
+            extensionGrid.Columns.Add(Column("Bytes", "字节", 78, false));
+            extensionGrid.Columns.Add(Column("Percent", "% 字节", 62, false));
+            extensionGrid.Columns.Add(Column("Files", "文件", 58, false));
             extensionGrid.CellPainting += ExtensionGrid_CellPainting;
         }
 
@@ -345,7 +359,7 @@ namespace ZyperWin__
                 double percent = child.Size * 100d / total;
                 int index = fileGrid.Rows.Add(
                     (child.IsDirectory ? "[+] " : "") + child.Name,
-                    ProgressText(percent),
+                    percent,
                     percent.ToString("0.0") + "%",
                     DisplayFormat.Bytes(child.PhysicalSize),
                     DisplayFormat.Bytes(child.Size),
@@ -508,6 +522,32 @@ namespace ZyperWin__
             e.Handled = true;
         }
 
+        private void FileGrid_CellPainting(object sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex != fileGrid.Columns["ChildPercent"].Index) return;
+
+            e.PaintBackground(e.ClipBounds, true);
+            double percent;
+            if (!double.TryParse(Convert.ToString(e.Value), out percent)) percent = 0d;
+            percent = Math.Max(0d, Math.Min(100d, percent));
+
+            var track = new Rectangle(
+                e.CellBounds.X + 7,
+                e.CellBounds.Y + Math.Max(4, (e.CellBounds.Height - 12) / 2),
+                Math.Max(1, e.CellBounds.Width - 14),
+                12);
+            using (var background = new SolidBrush(Color.FromArgb(229, 234, 231)))
+                e.Graphics.FillRectangle(background, track);
+            int fillWidth = (int)Math.Round(track.Width * percent / 100d);
+            if (fillWidth > 0)
+            {
+                var fill = new Rectangle(track.X, track.Y, fillWidth, track.Height);
+                using (var brush = new SolidBrush(AppPalette.Green)) e.Graphics.FillRectangle(brush, fill);
+            }
+            using (var border = new Pen(AppPalette.Border)) e.Graphics.DrawRectangle(border, track);
+            e.Handled = true;
+        }
+
         private void SetBusy(bool busy)
         {
             scanButton.Text = busy ? "取消扫描" : "开始扫描";
@@ -520,14 +560,24 @@ namespace ZyperWin__
             fileGrid.Enabled = !busy;
             extensionGrid.Enabled = !busy;
             upButton.Enabled = !busy && analysis != null && currentNode != analysis.Root;
+            progressColumnStyle.Width = busy ? 220F : 0F;
+            progress.Visible = busy;
             progress.Style = busy ? ProgressBarStyle.Marquee : ProgressBarStyle.Blocks;
             if (!busy) progress.Value = 0;
         }
 
-        private static string ProgressText(double percent)
+        private static void SetSplitterRatio(SplitContainer splitter, double ratio)
         {
-            int bars = Math.Max(0, Math.Min(10, (int)Math.Round(percent / 10d)));
-            return new string('■', bars) + new string('□', 10 - bars);
+            int length = splitter.Orientation == Orientation.Vertical
+                ? splitter.ClientSize.Width
+                : splitter.ClientSize.Height;
+            int available = length - splitter.SplitterWidth;
+            int minimum = splitter.Panel1MinSize;
+            int maximum = available - splitter.Panel2MinSize;
+            if (available <= 0 || maximum < minimum) return;
+
+            int distance = (int)Math.Round(available * ratio);
+            splitter.SplitterDistance = Math.Max(minimum, Math.Min(maximum, distance));
         }
 
         protected override void Dispose(bool disposing)

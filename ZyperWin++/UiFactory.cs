@@ -207,20 +207,21 @@ namespace ZyperWin__
         public static void ApplyTheme(Control root)
         {
             root.Font = BaseFont;
-            root.BackColor = AppPalette.Canvas;
+            var button = root as AntdUI.Button;
+            if (button != null)
+            {
+                button.BackColor = AppPalette.Green;
+                button.ForeColor = Color.White;
+                button.Radius = 4;
+            }
+            else
+            {
+                root.BackColor = AppPalette.Canvas;
+                if (root is Label) root.ForeColor = AppPalette.Text;
+            }
+
             foreach (Control child in root.Controls)
             {
-                if (child is AntdUI.Button)
-                {
-                    var button = (AntdUI.Button)child;
-                    button.BackColor = AppPalette.Green;
-                    button.ForeColor = Color.White;
-                    button.Radius = 4;
-                }
-                else if (child is Label)
-                {
-                    child.ForeColor = AppPalette.Text;
-                }
                 ApplyTheme(child);
             }
         }
