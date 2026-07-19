@@ -43,6 +43,9 @@ namespace ZyperWin__
             BuildNavigation();
             BuildStatusBar();
 
+            content.Dock = DockStyle.Fill;
+            content.BackColor = AppPalette.Canvas;
+
             Controls.Add(content);
             Controls.Add(bottomBar);
             Controls.Add(navigation);
@@ -53,6 +56,12 @@ namespace ZyperWin__
             FormClosed += delegate { AppOperationCoordinator.Changed -= OnOperationChanged; };
             Shown += delegate { Navigate(FinalModules[0]); };
         }
+
+        internal Control ContentHostForTests { get { return content; } }
+        internal Control NavigationHostForTests { get { return navigation; } }
+        internal Control TitleBarHostForTests { get { return titleBar; } }
+        internal Control BottomBarHostForTests { get { return bottomBar; } }
+        internal void NavigateForTests(string module) { Navigate(module); }
 
         public void SetMenuEnabled(bool enabled)
         {

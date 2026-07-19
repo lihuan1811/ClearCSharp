@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
+using System.Windows.Forms;
 using System.Xml.Linq;
 using ZyperWin__;
 
@@ -25,6 +26,7 @@ namespace CDriveCleaner.Tests
             Run("Cleanup execution truth", TestCleanupExecution);
             Run("Busy animation lifecycle", TestBusyAnimationLifecycle);
             Run("Final navigation contract", TestFinalNavigation);
+            Run("Main shell content layout", TestMainWindowLayout);
             Run("Disk analysis", TestDiskAnalysis);
             Run("Disk analysis memory bound", TestDiskAnalysisMemoryBound);
             Run("Disk directory memory bound", TestDiskDirectoryMemoryBound);
@@ -179,6 +181,35 @@ namespace CDriveCleaner.Tests
         {
             string[] expected = { "C盘深度清理", "软件强力卸载", "系统智能优化", "磁盘文件管理器", "CMD 系统修复" };
             Assert(MainWindow.FinalModules.SequenceEqual(expected), "main navigation no longer matches the final five modules");
+        }
+
+        private static void TestMainWindowLayout()
+        {
+            using (var shell = new MainWindow())
+            {
+                shell.CreateControl();
+                shell.PerformLayout();
+                Control content = shell.ContentHostForTests;
+                Assert(content.Dock == System.Windows.Forms.DockStyle.Fill,
+                    "main content host must fill the shell");
+                Assert(content.Width >= shell.ClientSize.Width - 2,
+                    "main content host is clipped horizontally");
+                Assert(content.Height > shell.ClientSize.Height / 2,
+                    "main content host retained its default 200x100 size");
+                Assert(content.Top >= shell.TitleBarHostForTests.Bottom &&
+                    content.Top >= shell.NavigationHostForTests.Bottom,
+                    "main content host overlaps the title or navigation bar");
+                Assert(content.Bottom <= shell.BottomBarHostForTests.Top,
+                    "main content host overlaps the bottom action bar");
+                shell.NavigateForTests(MainWindow.FinalModules[0]);
+                shell.PerformLayout();
+                Assert(content.Controls.Count == 1 && content.Controls[0] is CleanupDashboard,
+                    "default cleanup module was not mounted in the content host");
+                Assert(content.Controls[0].Dock == System.Windows.Forms.DockStyle.Fill &&
+                    content.Controls[0].Width == content.ClientSize.Width &&
+                    content.Controls[0].Height == content.ClientSize.Height,
+                    "default cleanup module does not fill the content host");
+            }
         }
 
         private static void TestCleanupFileSelection()

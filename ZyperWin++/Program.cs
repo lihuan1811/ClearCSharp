@@ -78,6 +78,16 @@ namespace ZyperWin__
                     TraceSmoke("main-window-constructed");
                     shell.CreateControl();
                     shell.PerformLayout();
+                    if (shell.ContentHostForTests.Dock != DockStyle.Fill ||
+                        shell.ContentHostForTests.Width < shell.ClientSize.Width - 2 ||
+                        shell.ContentHostForTests.Height <= shell.ClientSize.Height / 2)
+                        throw new InvalidOperationException("主内容区没有铺满窗口：" + shell.ContentHostForTests.Bounds);
+                    shell.NavigateForTests(MainWindow.FinalModules[0]);
+                    shell.PerformLayout();
+                    if (shell.ContentHostForTests.Controls.Count != 1 ||
+                        shell.ContentHostForTests.Controls[0].Dock != DockStyle.Fill ||
+                        shell.ContentHostForTests.Controls[0].Size != shell.ContentHostForTests.ClientSize)
+                        throw new InvalidOperationException("默认清理页面没有铺满主内容区。");
                     TraceSmoke("main-window-handle-created");
                 }
                 TraceSmoke("main-window-disposed");
