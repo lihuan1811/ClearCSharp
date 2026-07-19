@@ -210,8 +210,12 @@ namespace ZyperWin__
             var button = root as AntdUI.Button;
             if (button != null)
             {
+                button.Type = AntdUI.TTypeMini.Primary;
                 button.BackColor = AppPalette.Green;
+                button.BackHover = AppPalette.GreenHover;
+                button.BackActive = AppPalette.GreenActive;
                 button.ForeColor = Color.White;
+                button.Ghost = false;
                 button.Radius = 4;
             }
             else

@@ -235,11 +235,12 @@ namespace CDriveCleaner.Tests
             {
                 UiFactory.ApplyTheme(optimize);
                 var actionButtons = Descendants(optimize)
-                    .Where(control => control.GetType().FullName == "AntdUI.Button" &&
-                        control.Text != "其他" && control.Text != "MSEdge")
+                    .OfType<AntdUI.Button>()
+                    .Where(button => button.Text != "其他" && button.Text != "MSEdge")
                     .ToArray();
                 Assert(actionButtons.Length == 8, "system optimization action buttons are missing");
-                Assert(actionButtons.All(button => button.BackColor == AppPalette.Green &&
+                Assert(actionButtons.All(button => button.Type == AntdUI.TTypeMini.Primary &&
+                    button.BackColor == AppPalette.Green &&
                     button.ForeColor == System.Drawing.Color.White),
                     "system optimization buttons must not render as white-on-white blocks");
 
